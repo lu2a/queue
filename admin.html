@@ -9,9 +9,12 @@
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
         body { font-family: 'Cairo', sans-serif; }
     </style>
+    <!-- 1. تحميل مكتبات Firebase الأساسية أولاً -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    <!-- 2. ثم تحميل ملف الإعدادات الذي يحتوي على الدوال المساعدة -->
     <script src="firebase-config.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen p-4">
@@ -187,6 +190,9 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // **الخطوة الأولى: تهيئة Firebase**
+            initFirebase();
+            
             const tabs = document.querySelectorAll('.tab-button');
             const contents = document.querySelectorAll('.tab-content');
 
@@ -212,177 +218,129 @@
             // افتراضياً، تنشيط أول تبويب عند التحميل
             document.querySelector('.tab-button').click();
             
-            // تهيئة Firebase
-            // **هنا يجب إضافة تهيئة Firebase باستخدام مفاتيح مشروعك الخاصة**
-            const firebaseConfig = {
-                // ... (مفتاح API، معرف المشروع، إلخ)
-            };
-            // firebase.initializeApp(firebaseConfig);
-            // const db = firebase.firestore();
-            // const auth = firebase.auth();
-            // const rtdb = firebase.database();
+            // ----------------------------------------------------
+            // 1. وظيفة تحميل البيانات الأساسية (الإعدادات والعيادات)
+            // ----------------------------------------------------
+            async function loadInitialData() {
+                // تحميل العيادات لملء قوائم الاختيار (مثل تبويب النداء)
+                const clinics = await fetchClinics();
+                populateClinicSelect('call-clinic-select', clinics);
 
-            // *** وظائف JavaScript لإدارة الإعدادات والتفاعل مع Firebase ***
-            // (سيتم تزويدك بها لاحقاً)
+                // تحميل الإعدادات العامة
+                try {
+                    const doc = await db.collection('Settings').doc('general').get();
+                    if (doc.exists) {
+                        const data = doc.data();
+                        document.getElementById('center-name').value = data.centerName || '';
+                        document.getElementById('news-ticker-content').value = data.newsTickerContent || '';
+                        document.getElementById('news-ticker-speed').value = data.newsTickerSpeed || 5;
+                        document.getElementById('alert-duration').value = data.alertDuration || 5;
+                        document.getElementById('speech-rate').value = data.speechRate || 1.0;
+                        document.getElementById('audio-path').value = data.audioPath || '/audio/';
+                        document.querySelector(`input[name="media-source"][value="${data.mediaPathType || 'github'}"]`).checked = true;
+                    }
+                } catch (error) {
+                    console.error("Error loading general settings:", error);
+                }
+                
+                // عرض قائمة العيادات في تبويب 'clinics' (هنا يجب بناء جدول)
+                const clinicsTableContainer = document.getElementById('clinics-table');
+                if(clinics.length > 0) {
+                     clinicsTableContainer.innerHTML = '<!-- بناء جدول العيادات هنا -->';
+                     // مثال مبسط لضمان أننا حصلنا على البيانات
+                     clinicsTableContainer.innerHTML += `<p class="text-green-600">تم تحميل ${clinics.length} عيادة.</p>`;
+                } else {
+                     clinicsTableContainer.innerHTML = `<p class="text-red-500">فشل تحميل العيادات. تحقق من قاعدة البيانات.</p>`;
+                }
+
+                // عرض قائمة الشاشات
+                const screensListContainer = document.getElementById('screens-list');
+                 try {
+                    const screensSnapshot = await db.collection('Screens').get();
+                    if(screensSnapshot.size > 0) {
+                        screensListContainer.innerHTML = screensSnapshot.docs.map(doc => {
+                            const data = doc.data();
+                            return `<div class="p-2 border-b">الشاشة رقم ${toArabicNumbers(data.screenID)} (كلمة سر: ****) <button class="text-red-500 mr-2">حذف</button></div>`;
+                        }).join('');
+                    } else {
+                        screensListContainer.innerHTML = '<p class="text-gray-500">لم يتم العثور على شاشات عرض مسجلة.</p>';
+                    }
+                 } catch (error) {
+                     console.error("Error loading screens:", error);
+                 }
+            }
+            
+            // يجب أن يكون المستخدم قد سجل الدخول كإداري هنا قبل استدعاء loadInitialData
+            // سنقوم باستدعائها مؤقتاً لضمان اختبار الجلب من Firestore
+            loadInitialData(); 
+
+
+            // ----------------------------------------------------
+            // 2. وظيفة حفظ الإعدادات العامة (تتطلب isAdmin)
+            // ----------------------------------------------------
+            document.getElementById('save-general-settings').addEventListener('click', async () => {
+                // ... (منطق التحقق من المصادقة isAdmin() مفقود هنا) ...
+                
+                const settingsData = {
+                    centerName: document.getElementById('center-name').value,
+                    newsTickerContent: document.getElementById('news-ticker-content').value,
+                    newsTickerSpeed: parseFloat(document.getElementById('news-ticker-speed').value) || 5,
+                    alertDuration: parseInt(document.getElementById('alert-duration').value) || 5,
+                    speechRate: parseFloat(document.getElementById('speech-rate').value) || 1.0,
+                    mediaPathType: document.querySelector('input[name="media-source"]:checked').value,
+                    audioPath: document.getElementById('audio-path').value,
+                    // ... (باقي الحقول)
+                };
+
+                try {
+                    await db.collection('Settings').doc('general').set(settingsData, { merge: true });
+                    alert('تم حفظ الإعدادات العامة بنجاح!');
+                } catch (error) {
+                    console.error("Error saving settings (Check Auth/Rules):", error);
+                    alert('حدث خطأ أثناء الحفظ. تأكد من تسجيل الدخول كإداري.');
+                }
+            });
+
+            // ----------------------------------------------------
+            // 3. وظيفة إضافة العيادات (تتطلب isAdmin)
+            // ----------------------------------------------------
+            document.getElementById('add-clinic').addEventListener('click', async () => {
+                // ... (منطق التحقق من المصادقة isAdmin() مفقود هنا) ...
+                
+                const clinicName = document.getElementById('new-clinic-name').value;
+                const clinicNumber = parseInt(document.getElementById('new-clinic-number').value);
+                const screensStr = document.getElementById('new-clinic-screens').value;
+                const controlPassword = document.getElementById('new-clinic-password').value;
+                
+                if (!clinicName || isNaN(clinicNumber) || !controlPassword) {
+                    alert('الرجاء ملء جميع الحقول المطلوبة.');
+                    return;
+                }
+                
+                const clinicData = {
+                    clinicName: clinicName,
+                    clinicNumber: clinicNumber,
+                    screenIDs: screensStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)),
+                    controlPassword: controlPassword,
+                    isActive: true,
+                    maxAppointments: 50 
+                };
+
+                try {
+                    await db.collection('Clinics').add(clinicData);
+                    alert(`تم إضافة عيادة ${clinicName} بنجاح!`);
+                    document.getElementById('new-clinic-name').value = '';
+                    // ... (إعادة تحميل قائمة العيادات)
+                    loadInitialData();
+                } catch (error) {
+                    console.error("Error adding clinic (Check Auth/Rules):", error);
+                    alert('حدث خطأ أثناء إضافة العيادة. تأكد من تسجيل الدخول كإداري.');
+                }
+            });
+            
+            // ... (باقي وظائف الإدارة)
+
         });
-
-
-
-        document.addEventListener('DOMContentLoaded', () => {
-    // ----------------------------------------------------
-    // 1. مصادقة الأدمن (يجب تنفيذها عبر Firebase Auth)
-    // ----------------------------------------------------
-    
-    // افتراضياً: يجب التحقق من حالة المستخدم (auth.onAuthStateChanged) ودوره ('admin')
-    // إذا لم يكن أدمن، يتم توجيهه لصفحة تسجيل الدخول.
-    
-    // ----------------------------------------------------
-    // 2. تحميل البيانات الأساسية (العيادات والشاشات)
-    // ----------------------------------------------------
-    fetchClinics().then(clinics => {
-        // ملء قائمة العيادات في تبويب النداء
-        populateClinicSelect('call-clinic-select', clinics);
-    });
-    
-    // تحميل الإعدادات العامة عند بدء التشغيل
-    async function loadGeneralSettings() {
-        const doc = await db.collection('Settings').doc('general').get();
-        if (doc.exists) {
-            const data = doc.data();
-            document.getElementById('center-name').value = data.centerName || '';
-            document.getElementById('news-ticker-content').value = data.newsTickerContent || '';
-            document.getElementById('news-ticker-speed').value = data.newsTickerSpeed || 5;
-            document.getElementById('alert-duration').value = data.alertDuration || 5;
-            document.getElementById('speech-rate').value = data.speechRate || 1.0;
-            document.getElementById('audio-path').value = data.audioPath || '/audio/';
-            // تعيين خيار التخزين
-            document.querySelector(`input[name="media-source"][value="${data.mediaPathType || 'github'}"]`).checked = true;
-        }
-    }
-    loadGeneralSettings();
-
-    // ----------------------------------------------------
-    // 3. وظيفة حفظ الإعدادات العامة
-    // ----------------------------------------------------
-    document.getElementById('save-general-settings').addEventListener('click', async () => {
-        const settingsData = {
-            centerName: document.getElementById('center-name').value,
-            newsTickerContent: document.getElementById('news-ticker-content').value,
-            newsTickerSpeed: parseFloat(document.getElementById('news-ticker-speed').value) || 5,
-            alertDuration: parseInt(document.getElementById('alert-duration').value) || 5,
-            speechRate: parseFloat(document.getElementById('speech-rate').value) || 1.0,
-            mediaPathType: document.querySelector('input[name="media-source"]:checked').value,
-            audioPath: document.getElementById('audio-path').value,
-            // (إضافة باقي الحقول مثل mediaPath و instantAudioPath)
-        };
-
-        try {
-            await db.collection('Settings').doc('general').set(settingsData, { merge: true });
-            alert('تم حفظ الإعدادات العامة بنجاح!');
-        } catch (error) {
-            console.error("Error saving settings:", error);
-            alert('حدث خطأ أثناء الحفظ.');
-        }
-    });
-
-    // ----------------------------------------------------
-    // 4. وظائف النداء الفوري والتحكم (Realtime DB & Firestore)
-    // ----------------------------------------------------
-
-    // أ. نداء عميل معين
-    document.getElementById('call-specific-client').addEventListener('click', async () => {
-        const clinicId = document.getElementById('call-clinic-select').value;
-        const number = document.getElementById('call-specific-number').value;
-
-        if (!clinicId || !number) {
-            alert('يجب اختيار العيادة وإدخال رقم العميل.');
-            return;
-        }
-
-        try {
-            // تحديث الرقم الحالي مباشرة في Realtime DB
-            await rtdb.ref('queue/' + clinicId).update({
-                currentNumber: parseInt(number),
-                lastCallTime: new Date().toISOString()
-            });
-            alert(`تم نداء العميل رقم ${toArabicNumbers(number)} في العيادة.`);
-        } catch (error) {
-            console.error("Error calling client:", error);
-        }
-    });
-
-    // ب. تصفير جميع العيادات
-    document.getElementById('reset-all-clinics').addEventListener('click', async () => {
-        if (!confirm('هل أنت متأكد من تصفير جميع العيادات؟ سيتم جعل الرقم الحالي صفر.')) return;
-
-        try {
-            // يجب جلب جميع العيادات وتحديث كل عقدة في Realtime DB إلى 0
-            const clinics = await fetchClinics();
-            const updates = {};
-            clinics.forEach(clinic => {
-                updates['queue/' + clinic.id] = { currentNumber: 0, lastCallTime: new Date().toISOString() };
-            });
-
-            await rtdb.ref().update(updates);
-            alert('تم تصفير جميع العيادات بنجاح.');
-        } catch (error) {
-            console.error("Error resetting clinics:", error);
-        }
-    });
-    
-    // ج. إرسال تنبيه نصي على شاشة العرض (Realtime DB)
-    document.getElementById('send-display-alert').addEventListener('click', async () => {
-        const alertText = document.getElementById('display-alert-text').value;
-        if (!alertText) return;
-
-        try {
-             // إرسال التنبيه كرسالة عامة للشاشات للاستماع إليها
-            await rtdb.ref('notifications/displayAlert').set({
-                message: alertText,
-                timestamp: new Date().toISOString()
-            });
-            alert('تم إرسال التنبيه النصي بنجاح.');
-        } catch (error) {
-            console.error("Error sending alert:", error);
-        }
-    });
-
-    // ----------------------------------------------------
-    // 5. وظيفة إضافة العيادات (Firestore)
-    // ----------------------------------------------------
-    document.getElementById('add-clinic').addEventListener('click', async () => {
-        const clinicName = document.getElementById('new-clinic-name').value;
-        const clinicNumber = parseInt(document.getElementById('new-clinic-number').value);
-        const screensStr = document.getElementById('new-clinic-screens').value;
-        const controlPassword = document.getElementById('new-clinic-password').value;
-        
-        if (!clinicName || isNaN(clinicNumber) || !controlPassword) {
-            alert('الرجاء ملء جميع الحقول المطلوبة.');
-            return;
-        }
-        
-        const clinicData = {
-            clinicName: clinicName,
-            clinicNumber: clinicNumber,
-            screenIDs: screensStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)),
-            controlPassword: controlPassword,
-            isActive: true,
-            maxAppointments: 50 // القيمة الافتراضية
-        };
-
-        try {
-            await db.collection('Clinics').add(clinicData);
-            alert(`تم إضافة عيادة ${clinicName} بنجاح!`);
-            // تصفير النموذج
-            document.getElementById('new-clinic-name').value = '';
-            // ... (إعادة تحميل قائمة العيادات)
-        } catch (error) {
-            console.error("Error adding clinic:", error);
-        }
-    });
-
-});
-
         
     </script>
 </body>
