@@ -122,6 +122,89 @@
                 //     });
             });
         });
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+    let currentDoctorID = null;
+
+    // ----------------------------------------------------
+    // 1. وظيفة تسجيل الدخول (Firebase Auth)
+    // ----------------------------------------------------
+    document.getElementById('doctor-login-btn').addEventListener('click', () => {
+        const email = document.getElementById('doctor-email').value;
+        const password = document.getElementById('doctor-password').value;
+
+        if (!email || !password) return alert('الرجاء إدخال البريد وكلمة المرور.');
+
+        auth.signInWithEmailAndPassword(email, password)
+            .catch((error) => {
+                alert('فشل تسجيل الدخول: ' + error.message);
+            });
+    });
+    
+    // ----------------------------------------------------
+    // 2. مراقبة حالة المصادقة وعرض لوحة التحكم
+    // ----------------------------------------------------
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            currentDoctorID = user.uid;
+            document.getElementById('auth-container').classList.add('hidden');
+            document.getElementById('doctor-dashboard').classList.remove('hidden');
+            
+            // جلب بيانات الطبيب من Firestore
+            const docSnapshot = await db.collection('Doctors').doc(currentDoctorID).get();
+
+            if (docSnapshot.exists) {
+                const data = docSnapshot.data();
+                document.getElementById('doctor-name-display').textContent = data.name || 'غير معروف';
+                document.getElementById('doc-specialty').textContent = data.specialty || 'غير محدد';
+                document.getElementById('doc-vacation-balance').textContent = toArabicNumbers(data.vacationBalance || 0);
+                // ... (عرض باقي البيانات)
+
+                // يجب هنا استدعاء دالة لعرض جدول الحضور والانصراف بناءً على currentDoctorID
+                // displayAttendanceReport(currentDoctorID);
+            }
+
+        } else {
+            // تسجيل الخروج أو عدم المصادقة
+            document.getElementById('doctor-dashboard').classList.add('hidden');
+            document.getElementById('auth-container').classList.remove('hidden');
+        }
+    });
+
+    // ----------------------------------------------------
+    // 3. وظيفة تقديم طلب جديد (Firestore)
+    // ----------------------------------------------------
+    document.getElementById('request-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!currentDoctorID) return alert('يجب تسجيل الدخول أولاً.');
+
+        const requestData = {
+            doctorID: currentDoctorID,
+            type: document.getElementById('request-type').value,
+            fromDate: document.getElementById('request-from').value,
+            toDate: document.getElementById('request-to').value,
+            replacementDoctor: document.getElementById('replacement-doctor').value,
+            notes: document.getElementById('request-notes').value,
+            status: 'قيد المراجعة', // يتم الموافقة عليه لاحقا من صفحة الإدارة
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        try {
+            await db.collection('Requests').add(requestData);
+            alert('تم إرسال طلبك بنجاح. يرجى انتظار موافقة الإدارة.');
+            document.getElementById('request-form').reset();
+        } catch (error) {
+            console.error("Error submitting request:", error);
+            alert('حدث خطأ أثناء إرسال الطلب.');
+        }
+    });
+
+    // 4. وظيفة تسجيل الخروج
+    document.getElementById('doctor-logout-btn').addEventListener('click', () => {
+        auth.signOut();
+    });
+});  
     </script>
 </body>
 </html>
