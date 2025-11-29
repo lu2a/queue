@@ -123,6 +123,84 @@
                 //     .catch(error => console.error("Error submitting feedback: ", error));
             });
         });
+
+
+        document.addEventListener('DOMContentLoaded', async () => {
+    // 1. تحميل العيادات لقائمة الاختيار
+    const allClinics = await fetchClinics();
+    populateClinicSelect('client-clinic-selector', allClinics);
+
+    // ----------------------------------------------------
+    // 2. منطق متابعة الرقم (Realtime DB)
+    // ----------------------------------------------------
+    document.getElementById('start-tracking-btn').addEventListener('click', () => {
+        const clinicId = document.getElementById('client-clinic-selector').value;
+        const ticketNumber = document.getElementById('client-ticket-number').value;
+        const clinicName = document.querySelector(`#client-clinic-selector option[value="${clinicId}"]`).textContent;
+
+        if (!clinicId || !ticketNumber || isNaN(parseInt(ticketNumber))) {
+            alert('الرجاء اختيار العيادة وإدخال رقم التذكرة الصحيح.');
+            return;
+        }
+
+        document.getElementById('tracked-clinic-name').textContent = clinicName;
+        document.getElementById('my-number-display').textContent = toArabicNumbers(ticketNumber);
+        document.getElementById('tracking-info').classList.remove('hidden');
+
+        const myNumber = parseInt(ticketNumber);
+        
+        // الاستماع للتغييرات في Realtime DB
+        rtdb.ref('queue/' + clinicId + '/currentNumber').on('value', (snapshot) => {
+            const current = snapshot.val() || 0;
+            document.getElementById('current-clinic-number').textContent = toArabicNumbers(current);
+            const statusMessage = document.getElementById('status-message');
+
+            if (current >= myNumber) {
+                statusMessage.textContent = `📢 رقمك هو ${toArabicNumbers(myNumber)}. يرجى التوجه إلى العيادة الآن!`;
+                statusMessage.classList.replace('text-green-600', 'text-red-600');
+                // **تفعيل تنبيه المتصفح (Web Notification) هنا**
+            } else if (current >= (myNumber - 5)) {
+                statusMessage.textContent = `قرب دورك! تبقى ${toArabicNumbers(myNumber - current)} عميل.`;
+                statusMessage.classList.replace('text-red-600', 'text-yellow-600');
+            } else {
+                 statusMessage.textContent = `انتظر دورك. رقمك هو: ${toArabicNumbers(myNumber)}`;
+                 statusMessage.classList.replace('text-red-600', 'text-green-600');
+            }
+        });
+    });
+
+    // ----------------------------------------------------
+    // 3. منطق إرسال الشكوى (Firestore)
+    // ----------------------------------------------------
+    document.getElementById('feedback-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const feedbackText = document.getElementById('feedback-text').value;
+        if (feedbackText.length < 10) { // تعديل بسيط للتحقق من النص
+            alert('يجب أن يكون نص الشكوى/الاقتراح أكثر من 10 أحرف.');
+            return;
+        }
+
+        const feedbackData = {
+            name: document.getElementById('feedback-name').value || 'عميل مجهول',
+            phone: document.getElementById('feedback-phone').value,
+            email: document.getElementById('feedback-email').value,
+            type: document.getElementById('feedback-type').value,
+            text: feedbackText,
+            notes: document.getElementById('feedback-notes').value,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        try {
+            await db.collection('Feedback').add(feedbackData);
+            alert('تم إرسال الشكوى/الاقتراح بنجاح. شكراً لك.');
+            document.getElementById('feedback-form').reset();
+        } catch (error) {
+            console.error("Error submitting feedback: ", error);
+            alert('حدث خطأ أثناء الإرسال.');
+        }
+    });
+});
     </script>
 </body>
 </html>
