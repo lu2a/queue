@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>شاشة عرض الأرقام - المركز الطبي</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="firebase-config.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&display=swap');
         body { font-family: 'Cairo', sans-serif; }
@@ -14,9 +13,21 @@
             font-feature-settings: "liga" 0, "dlig" 0, "tnum" 1;
             font-variant-numeric: tabular-nums;
         }
+        /* إضافة نمط لتحريك شريط الأخبار */
+        @keyframes marquee {
+            0%   { transform: translate(100%, 0); }
+            100% { transform: translate(-100%, 0); }
+        }
+        .animate-marquee {
+            animation: marquee 20s linear infinite; /* سرعة افتراضية */
+        }
     </style>
+    <!-- 1. تحميل مكتبات Firebase الأساسية أولاً -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    <!-- 2. ثم تحميل ملف الإعدادات الذي يستخدم الدوال المعرفة في المكتبات -->
+    <script src="firebase-config.js"></script>
 </head>
 <body class="bg-gray-900 text-white min-h-screen flex flex-col p-2">
 
@@ -28,14 +39,15 @@
         <h1 id="center-name-display" class="text-3xl font-extrabold text-blue-400">المركز الطبي لخدمة العملاء والمرضى</h1>
         <div class="flex items-center space-x-6 rtl:space-x-reverse">
             <div class="text-xl font-bold arabic-numbers">
-                <span id="current-time">١١:١٨ ص</span>
+                <span id="current-time">-- : -- ص</span>
                 <span class="mx-2">|</span>
-                <span id="current-date">٢٩ / ١١ / ٢٠٢٥</span>
+                <span id="current-date">-- / -- / ----</span>
             </div>
             <select id="screen-selector" class="bg-gray-700 text-white p-2 rounded-md border border-gray-600 text-sm focus:ring-blue-500">
                 <option value="1">الشاشة رقم 1</option>
                 <option value="2">الشاشة رقم 2</option>
-                </select>
+                <!-- سيتم ملء باقي الشاشات من Firebase -->
+            </select>
             <button id="fullscreen-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full w-10 h-10 flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m7-5v4m0 0h4M16 4l-5 5m5 11v-4m0 0h-4m4 4l-5-5m-7 5v-4m0 0h4m-4 4l5-5" />
@@ -56,12 +68,13 @@
                 <div class="bg-blue-800 p-2 rounded-lg flex flex-col items-center justify-center shadow-lg">
                     <h3 class="text-lg font-bold mb-1">متابعة العميل</h3>
                     <div id="qr-code" class="bg-white p-1 rounded">
-                        
+                        <!-- مكان ظهور QR Code -->
+                        <p class="text-xs text-black">QR Code placeholder</p>
                     </div>
                     <p class="text-xs mt-1 text-blue-200">امسح الكود لتتبع رقمك</p>
                 </div>
                 <div class="bg-gray-800 p-2 rounded-lg flex items-center justify-center overflow-hidden relative shadow-lg">
-                    <img id="doctor-image" src="/media/doctors/default.jpg" alt="صورة الطبيب" class="object-cover w-full h-full transition-opacity duration-1000">
+                    <img id="doctor-image" src="https://placehold.co/100x100/374151/f3f4f6?text=طبيب" alt="صورة الطبيب" class="object-cover w-full h-full transition-opacity duration-1000">
                     <div id="doctor-name-overlay" class="absolute bottom-0 w-full bg-black bg-opacity-50 text-center text-sm p-1">
                         <span id="current-doctor-name">د. أحمد علي (طب الأسرة)</span>
                     </div>
@@ -83,182 +96,255 @@
     </div>
 
     <script>
-        // دالة لتحويل الأرقام إلى العربية الهندية
-        function toArabicNumbers(number) {
-            const arabicMap = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-            return String(number).replace(/[0-9]/g, (d) => arabicMap[d]);
+        // دالة النداء (موجودة في الـ global scope)
+        window.displayCall = function(clinicName, number, time) {
+            const bar = document.getElementById('notification-bar');
+            const alertTime = document.getElementById('alert-time');
+            const numberSpan = bar.querySelector('.arabic-numbers');
+            const clinicCard = document.querySelector(`.clinic-card[data-clinic-name="${clinicName}"]`);
+            const alertDuration = parseInt(document.body.getAttribute('data-alert-duration')) || 5000;
+
+            numberSpan.textContent = toArabicNumbers(number);
+            alertTime.textContent = time;
+            bar.innerHTML = `🔔 على العميل رقم <span class="arabic-numbers">${toArabicNumbers(number)}</span> التوجه إلى عيادة ${clinicName} (${time})`;
+            bar.classList.remove('hidden');
+
+            if (clinicCard) {
+                // حفظ اللون الأصلي قبل الوميض
+                clinicCard.originalBgClass = clinicCard.classList.contains('opacity-50') ? 'opacity-50' : 'bg-gray-800';
+                clinicCard.classList.add('bg-red-500', 'animate-pulse', 'shadow-red-500/50', 'ring-4', 'ring-red-500');
+            }
+
+            setTimeout(() => {
+                bar.classList.add('hidden');
+                if (clinicCard) {
+                    clinicCard.classList.remove('bg-red-500', 'animate-pulse', 'shadow-red-500/50', 'ring-4', 'ring-red-500');
+                    // العودة للون الأصلي
+                    clinicCard.classList.add(clinicCard.originalBgClass);
+                }
+            }, alertDuration);
+        };
+        
+        // دالة النطق
+        const speech = window.speechSynthesis;
+        let speechRate = 1.0; 
+        
+        function speak(text) {
+            if (!speech) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            // قد تحتاج إلى تجربة أصوات مختلفة أو لهجات لتجد الأفضل
+            utterance.lang = 'ar-SA'; 
+            utterance.rate = speechRate;
+            speech.speak(utterance);
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            // ... تهيئة Firebase
-
-            // وظيفة عرض النداء
-            window.displayCall = function(clinicName, number, time) {
-                const bar = document.getElementById('notification-bar');
-                const alertTime = document.getElementById('alert-time');
-                const numberSpan = bar.querySelector('.arabic-numbers');
-                
-                numberSpan.textContent = toArabicNumbers(number);
-                alertTime.textContent = time;
-                bar.innerHTML = `🔔 على العميل رقم <span class="arabic-numbers">${toArabicNumbers(number)}</span> التوجه إلى عيادة ${clinicName} (${time} ص)`;
-                bar.classList.remove('hidden');
-
-                // تلوين ووميض كارت العيادة
-                const clinicCard = document.querySelector(`.clinic-card[data-clinic-name="${clinicName}"]`);
-                if (clinicCard) {
-                    clinicCard.classList.add('bg-red-500', 'animate-pulse');
-                }
-
-                // إخفاء بعد فترة التنبيه (سيتم جلبها من الإعدادات)
-                setTimeout(() => {
-                    bar.classList.add('hidden');
-                    if (clinicCard) {
-                        clinicCard.classList.remove('bg-red-500', 'animate-pulse');
-                        clinicCard.classList.add('bg-gray-800'); // العودة للون الأصلي
-                    }
-                }, 5000); // 5 ثواني افتراضيا
-            };
-
-            // ... وظائف تحديث الوقت والتاريخ، وملء شاشات العرض، وتشغيل الفيديو
-            // ... وظائف الاستماع إلى Realtime Database لتحديث الأرقام
-            // ... وظيفة التحقق من كلمة سر الشاشة قبل الدخول
-
-            // تشغيل النداء التجريبي
-            // displayCall("طب الأسرة", ٧٨, "١١:٣٠");
-        });
-
+        // دالة النداء (تستخدم النداء الصوتي والاشعار)
+        function callClient(clinicName, number) {
+            // 1. النطق
+            const speechText = `على العميل رقم ${number} التوجه إلى عيادة ${clinicName}`;
+            speak(speechText);
+            
+            // 2. عرض الاشعار البصري
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+            
+            window.displayCall(clinicName, number, timeStr);
+        }
 
         document.addEventListener('DOMContentLoaded', async () => {
-    // ----------------------------------------------------
-    // 1. وظيفة النطق (Text-to-Speech)
-    // ----------------------------------------------------
-    const speech = window.speechSynthesis;
-    let speechRate = 1.0; // سيتم جلبها من الإعدادات
-
-    function speak(text) {
-        if (!speech) return;
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ar-EG'; // تعيين اللغة العربية المصرية
-        utterance.rate = speechRate;
-        speech.speak(utterance);
-    }
-
-    // ----------------------------------------------------
-    // 2. تحميل الإعدادات الأساسية (السرعة والمسارات)
-    // ----------------------------------------------------
-    const settingsDoc = await db.collection('Settings').doc('general').get();
-    let settings = {};
-    if (settingsDoc.exists) {
-        settings = settingsDoc.data();
-        document.getElementById('center-name-display').textContent = settings.centerName || 'المركز الطبي';
-        document.getElementById('ticker-content').textContent = settings.newsTickerContent || 'محتوى إخباري افتراضي';
-        speechRate = settings.speechRate || 1.0;
-        // هنا يتم استخدام settings.newsTickerSpeed لتعديل سرعة الـ CSS animation
-    }
-    
-    // ----------------------------------------------------
-    // 3. دالة النداء الصوتي والاشعار (تستخدم ملفات الصوت والـ TTS)
-    // ----------------------------------------------------
-
-    // ملاحظة: بما أنك طلبت ملفات صوتية جاهزة (ding.mp3, 25.mp3, clinic1.mp3)
-    // يجب استخدام مكتبة مثل Howler.js أو Web Audio API لتشغيل ملفات MP3 بالتسلسل.
-    
-    // مثال النداء المدمج:
-    function callClient(clinicName, number) {
-        // 1. النداء الصوتي (بافتراض استخدام Web Audio API لتشغيل ding.mp3 و الملفات الجاهزة)
-        // **هنا يتم تشغيل Ding.mp3 ثم 25.mp3 ثم clinic1.mp3 بالتسلسل**
-        
-        // 2. النطق (كخطة بديلة أو تكميلية)
-        const speechText = `على العميل رقم ${number} التوجه إلى عيادة ${clinicName}`;
-        speak(speechText);
-        
-        // 3. عرض الاشعار البصري
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
-        
-        window.displayCall(clinicName, number, timeStr);
-    }
-    
-    // ----------------------------------------------------
-    // 4. تحديث الأرقام عبر Realtime Database
-    // ----------------------------------------------------
-    const clinicCardsContainer = document.getElementById('clinic-cards-container');
-    const screenID = 1; // الافتراض هو الشاشة رقم 1
-    
-    // جلب العيادات المخصصة لهذه الشاشة
-    const clinicsToDisplay = (await fetchClinics()).filter(c => c.screenIDs.includes(screenID));
-
-    if (clinicsToDisplay.length === 0) {
-        clinicCardsContainer.innerHTML = '<p class="text-xl text-gray-400 p-4">لم يتم تخصيص أي عيادات لهذه الشاشة.</p>';
-        return;
-    }
-
-    // إنشاء كروت العيادات وربطها بـ Realtime DB
-    clinicsToDisplay.forEach(clinic => {
-        const card = document.createElement('div');
-        card.className = 'clinic-card bg-gray-800 p-4 rounded-lg shadow-lg transition duration-500';
-        card.setAttribute('data-clinic-id', clinic.id);
-        card.setAttribute('data-clinic-name', clinic.clinicName);
-        
-        card.innerHTML = `
-            <h3 class="text-xl font-bold text-white">${clinic.clinicName}</h3>
-            <p class="text-gray-400">الرقم الحالي:</p>
-            <span class="current-number arabic-numbers text-7xl font-black text-green-400 block leading-none">٠٠</span>
-            <p class="text-sm text-gray-500 mt-2">آخر نداء: <span class="last-call-time">--</span></p>
-            <p class="text-sm text-gray-500">الحالة: <span class="clinic-status font-bold ${clinic.isActive ? 'text-green-500' : 'text-red-500'}">${clinic.isActive ? 'نشطة' : 'متوقفة'}</span></p>
-        `;
-        clinicCardsContainer.appendChild(card);
-        
-        // الاستماع للتغييرات في Realtime DB
-        rtdb.ref('queue/' + clinic.id).on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                const oldNumber = parseInt(card.querySelector('.current-number').textContent.replace(/[^0-9]/g, '')) || 0;
-                const newNumber = data.currentNumber || 0;
-                
-                card.querySelector('.current-number').textContent = toArabicNumbers(newNumber);
-                
-                if (newNumber > oldNumber) {
-                    callClient(clinic.clinicName, newNumber);
-                }
+            
+            // ----------------------------------------------------
+            // 1. تحديث الوقت والتاريخ
+            // ----------------------------------------------------
+            function updateDateTime() {
+                const now = new Date();
+                document.getElementById('current-time').textContent = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+                document.getElementById('current-date').textContent = now.toLocaleDateString('ar-EG');
             }
-        });
-        
-        // الاستماع لتغيير حالة العيادة في Firestore
-        db.collection('Clinics').doc(clinic.id).onSnapshot(doc => {
-            const isActive = doc.data().isActive;
-            const statusSpan = card.querySelector('.clinic-status');
-            statusSpan.textContent = isActive ? 'نشطة' : 'متوقفة';
-            card.classList.toggle('opacity-50', !isActive); // لون باهت إذا كانت متوقفة
-        });
-    });
+            setInterval(updateDateTime, 1000);
+            updateDateTime(); 
 
-    // ----------------------------------------------------
-    // 5. تحديث الوقت والتاريخ (لتحويلها إلى الأرقام العربية)
-    // ----------------------------------------------------
-    function updateDateTime() {
-        const now = new Date();
-        document.getElementById('current-time').textContent = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
-        document.getElementById('current-date').textContent = now.toLocaleDateString('ar-EG');
-    }
-    setInterval(updateDateTime, 1000);
-    updateDateTime(); // تشغيل فوري
-    
-    // ----------------------------------------------------
-    // 6. تفعيل ملء الشاشة (باستخدام زر fullscreen-btn)
-    // ----------------------------------------------------
-    document.getElementById('fullscreen-btn').addEventListener('click', () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+            // ----------------------------------------------------
+            // 2. تحميل الإعدادات الأساسية (السرعة والمسارات)
+            // ----------------------------------------------------
+            const settingsDoc = await db.collection('Settings').doc('general').get();
+            let settings = {};
+            if (settingsDoc.exists) {
+                settings = settingsDoc.data();
+                document.getElementById('center-name-display').textContent = settings.centerName || 'المركز الطبي';
+                document.getElementById('ticker-content').textContent = settings.newsTickerContent || 'محتوى إخباري افتراضي';
+                speechRate = settings.speechRate || 1.0;
+                document.body.setAttribute('data-alert-duration', (settings.alertDuration || 7) * 1000);
+                
+                // تعديل سرعة شريط الأخبار
+                const tickerElement = document.getElementById('ticker-content');
+                const speed = (settings.newsTickerSpeed || 5) * 4; // تحويل 1-10 إلى ثواني (40s بطيء، 4s سريع)
+                tickerElement.style.animationDuration = `${45 - (settings.newsTickerSpeed * 4)}s`;
+            }
+            
+            // ----------------------------------------------------
+            // 3. تحديث الأرقام عبر Realtime Database (قلب المشكلة)
+            // ----------------------------------------------------
+            const clinicCardsContainer = document.getElementById('clinic-cards-container');
+            const screenSelector = document.getElementById('screen-selector');
+            
+            // نستخدم القيمة الافتراضية للشاشة حتى يتم اختيار واحدة
+            let screenID = parseInt(screenSelector.value) || 1; 
+            
+            // جلب العيادات المخصصة لهذه الشاشة
+            const allClinics = await fetchClinics();
+            const clinicsToDisplay = allClinics.filter(c => c.screenIDs && c.screenIDs.includes(screenID));
+
+            if (clinicsToDisplay.length === 0) {
+                clinicCardsContainer.innerHTML = '<p class="text-xl text-gray-400 p-4">لم يتم تخصيص أي عيادات لهذه الشاشة (الافتراضية). اختر شاشة أخرى.</p>';
+                // يجب هنا ملء قائمة الشاشات من Firestore
+                const screensSnapshot = await db.collection('Screens').get();
+                screensSnapshot.forEach(doc => {
+                    if (doc.id !== screenID.toString()) {
+                         const option = document.createElement('option');
+                         option.value = doc.data().screenID;
+                         option.textContent = `الشاشة رقم ${doc.data().screenID}`;
+                         screenSelector.appendChild(option);
+                    }
+                });
+                return;
+            }
+
+            // إزالة رسالة "جاري التحميل"
+            clinicCardsContainer.innerHTML = ''; 
+
+            // إنشاء كروت العيادات وربطها بـ Realtime DB و Firestore
+            clinicsToDisplay.forEach(clinic => {
+                const card = document.createElement('div');
+                card.className = 'clinic-card bg-gray-800 p-4 rounded-lg shadow-lg transition duration-500';
+                card.setAttribute('data-clinic-id', clinic.id);
+                card.setAttribute('data-clinic-name', clinic.clinicName);
+                
+                card.innerHTML = `
+                    <h3 class="text-xl font-bold text-white">${clinic.clinicName}</h3>
+                    <p class="text-gray-400">الرقم الحالي:</p>
+                    <span class="current-number arabic-numbers text-7xl font-black text-green-400 block leading-none">٠٠</span>
+                    <p class="text-sm text-gray-500 mt-2">آخر نداء: <span class="last-call-time">--</span></p>
+                    <p class="text-sm text-gray-500">الحالة: <span class="clinic-status font-bold ${clinic.isActive ? 'text-green-500' : 'text-red-500'}">${clinic.isActive ? 'نشطة' : 'متوقفة'}</span></p>
+                `;
+                clinicCardsContainer.appendChild(card);
+                
+                // الاستماع للتغييرات في Realtime DB
+                rtdb.ref('queue/' + clinic.id).on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        const currentNumberElement = card.querySelector('.current-number');
+                        const lastCallTimeElement = card.querySelector('.last-call-time');
+                        
+                        const oldNumber = parseInt(currentNumberElement.textContent.replace(/[^0-9]/g, '')) || 0;
+                        const newNumber = data.currentNumber || 0;
+                        
+                        currentNumberElement.textContent = toArabicNumbers(newNumber);
+                        
+                        if (data.lastCallTime) {
+                            const callTime = new Date(data.lastCallTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+                            lastCallTimeElement.textContent = callTime;
+                        }
+                        
+                        // تفعيل النداء الصوتي عند زيادة الرقم
+                        if (newNumber > oldNumber) {
+                            callClient(clinic.clinicName, newNumber);
+                        }
+                    } else {
+                        // تهيئة العقدة إذا لم تكن موجودة
+                        rtdb.ref('queue/' + clinic.id).set({ currentNumber: 0, lastCallTime: new Date().toISOString() });
+                    }
+                }, error => {
+                    console.error("Realtime DB Listener Error for clinic", clinic.clinicName, error);
+                });
+                
+                // الاستماع لتغيير حالة العيادة في Firestore
+                db.collection('Clinics').doc(clinic.id).onSnapshot(doc => {
+                    if (doc.exists) {
+                        const isActive = doc.data().isActive;
+                        const statusSpan = card.querySelector('.clinic-status');
+                        statusSpan.textContent = isActive ? 'نشطة' : 'متوقفة';
+                        statusSpan.classList.toggle('text-green-500', isActive);
+                        statusSpan.classList.toggle('text-red-500', !isActive);
+                        card.classList.toggle('opacity-50', !isActive); // لون باهت إذا كانت متوقفة
+                    }
+                }, error => {
+                    console.error("Firestore Listener Error for clinic", clinic.clinicName, error);
+                });
             });
-        } else {
-            document.exitFullscreen();
-        }
-    });
 
-});
+            // ----------------------------------------------------
+            // 4. تفعيل ملء الشاشة
+            // ----------------------------------------------------
+            document.getElementById('fullscreen-btn').addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+                    });
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+
+        });
         
     </script>
 </body>
 </html>
+```
+
+## 3. 🛡️ إصلاح قواعد أمان Firebase (مطلوب منك تنفيذ هذا يدوياً)
+
+المشكلة الأكبر قد تكون في قواعد الأمان لديك. بشكل افتراضي، تمنع Firebase القراءة والكتابة للجميع إلا إذا كان المستخدم مسجلاً. لحل مشكلة العرض والقراءة، يجب أن تسمح بالقراءة لصفحة العرض.
+
+**الرجاء الذهاب إلى Firebase Console وتطبيق القواعد المؤقتة التالية:**
+
+### **أ. قواعد Firestore (لإعدادات المركز والعيادات)**
+(اذهب إلى Firestore -> Rules)
+
+```firebase
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // السماح للجميع بقراءة الإعدادات والعيادات والشاشات (لقراءة البيانات في صفحة العرض)
+    match /Settings/{docId} {
+      allow read: true;
+      allow write: if request.auth != null && resource.data.role == 'admin';
+    }
+    match /Clinics/{docId} {
+      allow read: true;
+      allow write: if request.auth != null && resource.data.role == 'admin';
+    }
+    match /Screens/{docId} {
+      allow read: true;
+      allow write: if request.auth != null && resource.data.role == 'admin';
+    }
+    
+    // المجموعات الأخرى (يمكنك تركها مغلقة أو فتحها حسب الحاجة)
+    match /{document=**} {
+      allow read, write: false;
+    }
+  }
+}
+```
+
+### **ب. قواعد Realtime Database (لأرقام الطابور)**
+(اذهب إلى Realtime Database -> Rules)
+
+```json
+{
+  "rules": {
+    // الطابور يجب أن يكون قابلاً للقراءة للجميع
+    "queue": {
+      ".read": true, 
+      ".write": "auth != null" // الكتابة مسموحة فقط للمستخدمين المصادق عليهم (الأطباء/الإدارة)
+    },
+    // التنبيهات أيضاً يجب أن تكون قابلة للقراءة
+    "notifications": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    ".read": false,
+    ".write": false
+  }
+}
