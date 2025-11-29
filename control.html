@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>صفحة التحكم بالعيادة</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="firebase-config.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
         body { font-family: 'Cairo', sans-serif; }
@@ -13,8 +12,13 @@
         .control-btn { transition: background-color 0.2s, transform 0.1s; }
         .control-btn:active { transform: scale(0.98); }
     </style>
+    <!-- 1. تحميل مكتبات Firebase الأساسية أولاً -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <!-- 2. ثم تحميل ملف الإعدادات الذي يحتوي على الدوال المساعدة -->
+    <script src="firebase-config.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen p-4 flex items-center justify-center">
 
@@ -80,180 +84,159 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // ... تهيئة Firebase
+        document.addEventListener('DOMContentLoaded', async () => {
+            // **الخطوة الأولى: تهيئة Firebase**
+            initFirebase(); 
+            
+            // 1. تحميل العيادات لنموذج الدخول والتحويل
+            const allClinics = await fetchClinics();
+            populateClinicSelect('clinic-selector', allClinics);
+            populateClinicSelect('transfer-clinic-select', allClinics); 
 
-            // وظيفة التحقق من كلمة السر والدخول
-            document.getElementById('login-btn').addEventListener('click', () => {
+            let currentClinicId = null;
+
+            // ----------------------------------------------------
+            // 2. وظيفة تسجيل الدخول (التحقق من كلمة السر في Firestore)
+            // ----------------------------------------------------
+            document.getElementById('login-btn').addEventListener('click', async () => {
                 const clinicId = document.getElementById('clinic-selector').value;
                 const password = document.getElementById('clinic-password').value;
-                
-                // **هنا يتم التحقق من كلمة السر في Firebase Firestore (Clinics Collection)**
-                if (clinicId && password === 'correct_password') { // مثال افتراضي
-                    document.getElementById('login-form').classList.add('hidden');
-                    document.getElementById('control-panel').classList.remove('hidden');
-                    document.getElementById('clinic-title').textContent = document.querySelector(`#clinic-selector option[value="${clinicId}"]`).textContent;
-                    // **بدء الاستماع لـ Realtime Database لتحديث الرقم الحالي**
-                } else {
-                    alert('خطأ في اختيار العيادة أو كلمة السر.');
+
+                if (!clinicId || !password) {
+                    alert('الرجاء اختيار العيادة وإدخال كلمة السر.');
+                    return;
+                }
+
+                try {
+                    const clinicDoc = await db.collection('Clinics').doc(clinicId).get();
+
+                    if (clinicDoc.exists && clinicDoc.data().controlPassword === password) {
+                        currentClinicId = clinicId;
+                        document.getElementById('login-form').classList.add('hidden');
+                        document.getElementById('control-panel').classList.remove('hidden');
+
+                        const clinicName = clinicDoc.data().clinicName;
+                        document.getElementById('clinic-title').textContent = clinicName;
+                        
+                        // بدء الاستماع لتحديث الرقم الحالي
+                        rtdb.ref('queue/' + currentClinicId).on('value', (snapshot) => {
+                            const data = snapshot.val();
+                            const currentNumber = data ? data.currentNumber : 0;
+                            document.getElementById('current-number-display').textContent = toArabicNumbers(currentNumber);
+                        }, error => {
+                            console.error("Control Panel RTDB Error:", error);
+                        });
+                        
+                    } else {
+                        alert('كلمة السر غير صحيحة أو العيادة غير موجودة.');
+                    }
+                } catch (error) {
+                    console.error("Login Error:", error);
+                    alert('حدث خطأ في الاتصال بالبيانات. تحقق من القواعد.');
                 }
             });
 
-            // وظيفة العميل التالي
-            document.getElementById('next-client-btn').addEventListener('click', () => {
-                // **تحديث currentNumber في Realtime Database**
-                // **تنفيذ النداء الصوتي عبر Web Speech API**
+            // ----------------------------------------------------
+            // 3. وظيفة العميل التالي (تحديث Realtime DB)
+            // ----------------------------------------------------
+            document.getElementById('next-client-btn').addEventListener('click', async () => {
+                if (!currentClinicId) return;
+
+                const currentNumberSpan = document.getElementById('current-number-display');
+                const currentNumber = parseInt(currentNumberSpan.textContent.replace(/[^0-9]/g, '')) || 0;
+                const nextNumber = currentNumber + 1;
+
+                try {
+                    await rtdb.ref('queue/' + currentClinicId).update({
+                        currentNumber: nextNumber,
+                        lastCallTime: new Date().toISOString()
+                    });
+                    // النداء الصوتي يجب أن يحدث تلقائيًا في صفحة العرض (display.html)
+                    // يمكن إضافة نطق محلي للموظف لتأكيد العملية
+                } catch (error) {
+                    console.error("Error moving to next client:", error);
+                    alert('فشل تحديث الطابور. تحقق من صلاحيات الكتابة.');
+                }
+            });
+
+            // ----------------------------------------------------
+            // 4. وظيفة إيقاف/استئناف العيادة (تحديث Firestore)
+            // ----------------------------------------------------
+            document.getElementById('stop-clinic-btn').addEventListener('click', async () => {
+                if (!currentClinicId) return;
+                const btn = document.getElementById('stop-clinic-btn');
+                const isActive = btn.textContent.includes('إيقاف');
+
+                try {
+                    await db.collection('Clinics').doc(currentClinicId).update({
+                        isActive: !isActive
+                    });
+                    
+                    // تحديث نص الزر
+                    if (isActive) {
+                        btn.textContent = 'استئناف العيادة 🟢';
+                        btn.classList.replace('bg-red-600', 'bg-green-600');
+                    } else {
+                        btn.textContent = 'إيقاف العيادة 🛑';
+                        btn.classList.replace('bg-green-600', 'bg-red-600');
+                    }
+                    alert(`تم ${isActive ? 'إيقاف' : 'استئناف'} العيادة بنجاح.`);
+                } catch (error) {
+                    console.error("Error toggling clinic status:", error);
+                    alert('فشل تغيير حالة العيادة. تحقق من صلاحيات الكتابة.');
+                }
+            });
+
+            // 5. وظيفة تصفير العيادة
+            document.getElementById('reset-clinic-btn').addEventListener('click', async () => {
+                if (!currentClinicId) return;
+                if (!confirm('هل أنت متأكد من تصفير العيادة؟')) return;
+
+                try {
+                    await rtdb.ref('queue/' + currentClinicId).update({
+                        currentNumber: 0,
+                        lastCallTime: new Date().toISOString()
+                    });
+                    alert('تم تصفير العيادة.');
+                } catch (error) {
+                    console.error("Error resetting clinic:", error);
+                }
+            });
+
+            // 6. وظيفة التحويل
+            document.getElementById('transfer-clinic-select').addEventListener('change', async function() {
+                if (!currentClinicId || !this.value) return;
+                const transferToId = this.value;
+
+                const currentNumberSpan = document.getElementById('current-number-display');
+                const currentNumber = parseInt(currentNumberSpan.textContent.replace(/[^0-9]/g, '')) || 0;
+
+                if (!confirm(`هل تريد تحويل العميل رقم ${toArabicNumbers(currentNumber)} إلى العيادة الجديدة؟`)) {
+                    this.value = ''; 
+                    return;
+                }
+
+                try {
+                    // تحديث رقم العميل في العيادة المستقبلة
+                    await rtdb.ref('queue/' + transferToId).update({
+                        currentNumber: currentNumber,
+                        lastCallTime: new Date().toISOString()
+                    });
+                    alert('تم التحويل بنجاح! يرجى نداء العميل التالي في عيادتك الأصلية.');
+                    this.value = ''; 
+                } catch (error) {
+                    console.error("Error transferring client:", error);
+                }
             });
             
-            // ... باقي وظائف الأزرار (تكرار، تصفير، إيقاف، إلخ)
+            // 7. الخروج
+            document.getElementById('logout-btn').addEventListener('click', () => {
+                currentClinicId = null;
+                document.getElementById('control-panel').classList.add('hidden');
+                document.getElementById('login-form').classList.remove('hidden');
+            });
+
         });
-
-        document.addEventListener('DOMContentLoaded', async () => {
-    // 1. تحميل العيادات لنموذج الدخول
-    const allClinics = await fetchClinics();
-    populateClinicSelect('clinic-selector', allClinics);
-    populateClinicSelect('transfer-clinic-select', allClinics); // لزر التحويل
-
-    let currentClinicId = null;
-
-    // ----------------------------------------------------
-    // 2. وظيفة تسجيل الدخول (التحقق من كلمة السر في Firestore)
-    // ----------------------------------------------------
-    document.getElementById('login-btn').addEventListener('click', async () => {
-        const clinicId = document.getElementById('clinic-selector').value;
-        const password = document.getElementById('clinic-password').value;
-
-        if (!clinicId || !password) {
-            alert('الرجاء اختيار العيادة وإدخال كلمة السر.');
-            return;
-        }
-
-        try {
-            const clinicDoc = await db.collection('Clinics').doc(clinicId).get();
-
-            if (clinicDoc.exists && clinicDoc.data().controlPassword === password) {
-                currentClinicId = clinicId;
-                document.getElementById('login-form').classList.add('hidden');
-                document.getElementById('control-panel').classList.remove('hidden');
-
-                const clinicName = clinicDoc.data().clinicName;
-                document.getElementById('clinic-title').textContent = clinicName;
-                
-                // بدء الاستماع لتحديث الرقم الحالي
-                rtdb.ref('queue/' + currentClinicId).on('value', (snapshot) => {
-                    const data = snapshot.val();
-                    const currentNumber = data ? data.currentNumber : 0;
-                    document.getElementById('current-number-display').textContent = toArabicNumbers(currentNumber);
-                });
-                
-            } else {
-                alert('كلمة السر غير صحيحة أو العيادة غير موجودة.');
-            }
-        } catch (error) {
-            console.error("Login Error:", error);
-            alert('حدث خطأ في الاتصال بالبيانات.');
-        }
-    });
-
-    // ----------------------------------------------------
-    // 3. وظيفة العميل التالي (تحديث Realtime DB)
-    // ----------------------------------------------------
-    document.getElementById('next-client-btn').addEventListener('click', async () => {
-        if (!currentClinicId) return;
-
-        const currentNumberSpan = document.getElementById('current-number-display');
-        const currentNumber = parseInt(currentNumberSpan.textContent.replace(/[^0-9]/g, '')) || 0;
-        const nextNumber = currentNumber + 1;
-
-        try {
-            await rtdb.ref('queue/' + currentClinicId).update({
-                currentNumber: nextNumber,
-                lastCallTime: new Date().toISOString()
-            });
-            // النداء الصوتي (يجب إضافة منطق النطق هنا)
-            // speak(`العميل التالي، رقم ${nextNumber}`);
-        } catch (error) {
-            console.error("Error moving to next client:", error);
-        }
-    });
-
-    // ----------------------------------------------------
-    // 4. وظيفة إيقاف/استئناف العيادة (تحديث Firestore)
-    // ----------------------------------------------------
-    document.getElementById('stop-clinic-btn').addEventListener('click', async () => {
-        if (!currentClinicId) return;
-        const btn = document.getElementById('stop-clinic-btn');
-        const isActive = btn.textContent.includes('إيقاف');
-
-        try {
-            await db.collection('Clinics').doc(currentClinicId).update({
-                isActive: !isActive
-            });
-            
-            // تحديث نص الزر
-            if (isActive) {
-                btn.textContent = 'استئناف العيادة 🟢';
-                btn.classList.replace('bg-red-600', 'bg-green-600');
-            } else {
-                btn.textContent = 'إيقاف العيادة 🛑';
-                btn.classList.replace('bg-green-600', 'bg-red-600');
-            }
-            alert(`تم ${isActive ? 'إيقاف' : 'استئناف'} العيادة بنجاح.`);
-        } catch (error) {
-            console.error("Error toggling clinic status:", error);
-        }
-    });
-
-    // 5. وظيفة تصفير العيادة
-    document.getElementById('reset-clinic-btn').addEventListener('click', async () => {
-        if (!currentClinicId) return;
-        if (!confirm('هل أنت متأكد من تصفير العيادة؟')) return;
-
-        try {
-            await rtdb.ref('queue/' + currentClinicId).update({
-                currentNumber: 0,
-                lastCallTime: new Date().toISOString()
-            });
-            alert('تم تصفير العيادة.');
-        } catch (error) {
-            console.error("Error resetting clinic:", error);
-        }
-    });
-
-    // 6. وظيفة التحويل (تحديث Realtime DB في عيادة أخرى)
-    document.getElementById('transfer-clinic-select').addEventListener('change', async function() {
-        if (!currentClinicId || !this.value) return;
-        const transferToId = this.value;
-
-        const currentNumberSpan = document.getElementById('current-number-display');
-        const currentNumber = parseInt(currentNumberSpan.textContent.replace(/[^0-9]/g, '')) || 0;
-
-        if (!confirm(`هل تريد تحويل العميل رقم ${toArabicNumbers(currentNumber)} إلى العيادة الجديدة؟`)) {
-            this.value = ''; // إلغاء التحديد
-            return;
-        }
-
-        try {
-            // تحديث رقم العميل في العيادة المستقبلة
-            await rtdb.ref('queue/' + transferToId).update({
-                currentNumber: currentNumber,
-                lastCallTime: new Date().toISOString()
-            });
-            alert('تم التحويل بنجاح! يرجى نداء العميل التالي في عيادتك الأصلية.');
-            this.value = ''; // إلغاء التحديد
-        } catch (error) {
-            console.error("Error transferring client:", error);
-        }
-    });
-    
-    // 7. الخروج
-    document.getElementById('logout-btn').addEventListener('click', () => {
-        currentClinicId = null;
-        document.getElementById('control-panel').classList.add('hidden');
-        document.getElementById('login-form').classList.remove('hidden');
-    });
-
-});
     </script>
 </body>
 </html>
