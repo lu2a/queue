@@ -26,7 +26,7 @@
         <h2 class="text-3xl font-bold text-indigo-700 mb-6">تسجيل الدخول للتحكم</h2>
         <div class="space-y-4">
             <select id="clinic-selector" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-                <option value="">اختر العيادة</option>
+                <option value="">جاري تحميل العيادات...</option>
                 </select>
             <input type="password" id="clinic-password" placeholder="أدخل كلمة السر للعيادة" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
             <button id="login-btn" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition">دخول</button>
@@ -36,10 +36,10 @@
     <div id="control-panel" class="w-full max-w-4xl bg-white p-8 rounded-xl shadow-2xl hidden">
         
         <header class="flex justify-between items-center mb-6 pb-4 border-b">
-            <h1 id="clinic-title" class="text-3xl font-extrabold text-indigo-700">عيادة طب الأسرة</h1>
+            <h1 id="clinic-title" class="text-3xl font-extrabold text-indigo-700">عيادة --</h1>
             <div class="text-center">
                 <p class="text-gray-500 text-lg">الرقم الحالي:</p>
-                <span id="current-number-display" class="arabic-numbers text-6xl font-black text-red-600 leading-none">٧٧</span>
+                <span id="current-number-display" class="arabic-numbers text-6xl font-black text-red-600 leading-none">٠٠</span>
             </div>
         </header>
 
@@ -108,6 +108,7 @@
                 }
 
                 try {
+                    // db هو متغير عالمي الآن
                     const clinicDoc = await db.collection('Clinics').doc(clinicId).get();
 
                     if (clinicDoc.exists && clinicDoc.data().controlPassword === password) {
@@ -116,9 +117,10 @@
                         document.getElementById('control-panel').classList.remove('hidden');
 
                         const clinicName = clinicDoc.data().clinicName;
-                        document.getElementById('clinic-title').textContent = clinicName;
+                        document.getElementById('clinic-title').textContent = `عيادة ${clinicName}`;
                         
                         // بدء الاستماع لتحديث الرقم الحالي
+                        // rtdb هو متغير عالمي الآن
                         rtdb.ref('queue/' + currentClinicId).on('value', (snapshot) => {
                             const data = snapshot.val();
                             const currentNumber = data ? data.currentNumber : 0;
@@ -147,11 +149,11 @@
                 const nextNumber = currentNumber + 1;
 
                 try {
+                    // rtdb هو متغير عالمي الآن
                     await rtdb.ref('queue/' + currentClinicId).update({
                         currentNumber: nextNumber,
                         lastCallTime: new Date().toISOString()
                     });
-                    // النداء الصوتي يجب أن يحدث تلقائيًا في صفحة العرض (display.html)
                     // يمكن إضافة نطق محلي للموظف لتأكيد العملية
                 } catch (error) {
                     console.error("Error moving to next client:", error);
@@ -168,6 +170,7 @@
                 const isActive = btn.textContent.includes('إيقاف');
 
                 try {
+                    // db هو متغير عالمي الآن
                     await db.collection('Clinics').doc(currentClinicId).update({
                         isActive: !isActive
                     });
@@ -193,6 +196,7 @@
                 if (!confirm('هل أنت متأكد من تصفير العيادة؟')) return;
 
                 try {
+                    // rtdb هو متغير عالمي الآن
                     await rtdb.ref('queue/' + currentClinicId).update({
                         currentNumber: 0,
                         lastCallTime: new Date().toISOString()
@@ -202,7 +206,7 @@
                     console.error("Error resetting clinic:", error);
                 }
             });
-
+            
             // 6. وظيفة التحويل
             document.getElementById('transfer-clinic-select').addEventListener('change', async function() {
                 if (!currentClinicId || !this.value) return;
@@ -228,7 +232,7 @@
                     console.error("Error transferring client:", error);
                 }
             });
-            
+
             // 7. الخروج
             document.getElementById('logout-btn').addEventListener('click', () => {
                 currentClinicId = null;
