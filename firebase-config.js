@@ -1,7 +1,6 @@
 // يجب التأكد من تحميل مكتبات Firebase عبر <script> tags في ملفات HTML قبل هذا الملف.
 
 // إعدادات Firebase المقدمة من المستخدم
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyBi5aUu2DN15ZYgV79SbJamndIv1ilr8QQ",
   authDomain: "queue-403b6.firebaseapp.com",
@@ -13,52 +12,57 @@ const firebaseConfig = {
   measurementId: "G-2TW7GHP5RR"
 };
 
+// تعريف المتغيرات في النطاق العالمي (window) لضمان الوصول إليها من كل صفحة
+window.db = null;
+window.rtdb = null;
+window.auth = null;
 
-// تهيئة التطبيق
-// نستخدم نسخة firebase-app-compat التي يجب تحميلها في HTML
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
+
+// دالة لتهيئة Firebase وضمان أنها تعمل مرة واحدة فقط
+window.initFirebase = function() {
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    // تخصيص متغيرات النطاق العالمي بعد التهيئة
+    window.auth = firebase.auth();
+    window.db = firebase.firestore(); // Firestore
+    window.rtdb = firebase.database(); // Realtime Database
+    console.log("✅ Firebase initialized successfully.");
 }
 
-// تعريف المتغيرات للوصول السريع
-// يجب أن تكون هذه المتغيرات global لتعمل في جميع الصفحات التي تستخدم هذا الملف
-const auth = firebase.auth();
-const db = firebase.firestore(); // Firestore
-const rtdb = firebase.database(); // Realtime Database
-
-// دالة مساعدة لتحويل الأرقام إلى العربية الهندية
-function toArabicNumbers(number) {
-    // التأكد من أن المدخل رقم أو يمكن تحويله إلى رقم
+// دالة مساعدة لتحويل الأرقام إلى العربية الهندية (متاحة عالمياً)
+window.toArabicNumbers = function(number) {
     if (typeof number === 'string' && !/^\d+$/.test(number)) {
-        return number; // إذا كان نصًا غير رقمي، قم بإعادته كما هو
+        return number;
     }
     const arabicMap = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-    // تحويل الرقم إلى نص ثم استبدال الأرقام الإنجليزية بالعربية
     return String(number).replace(/[0-9]/g, (d) => arabicMap[d]);
 }
 
-// دالة لجلب جميع العيادات لملء قوائم الاختيار
-async function fetchClinics() {
+// دالة لجلب جميع العيادات لملء قوائم الاختيار (متاحة عالمياً)
+window.fetchClinics = async function() {
+    initFirebase(); // التأكد من التهيئة
     try {
-        const clinicsSnapshot = await db.collection('Clinics').get();
+        // يجب استخدام المتغير العالمي window.db
+        const clinicsSnapshot = await window.db.collection('Clinics').get();
         const clinics = [];
         clinicsSnapshot.forEach(doc => {
             clinics.push({ id: doc.id, ...doc.data() });
         });
-        console.log("Clinics fetched successfully:", clinics.length);
+        console.log(`✅ Clinics fetched: ${clinics.length} found.`);
         return clinics;
     } catch (error) {
-        console.error("Error fetching clinics from Firestore:", error);
+        // إذا فشل الجلب، تحقق من أنك قمت بإنشاء كوليكشن 'Clinics' وأن قواعد الأمان تسمح بالقراءة
+        console.error("❌ Error fetching clinics from Firestore (Check Rules!):", error);
         return [];
     }
 }
 
-// دالة لملء قائمة الاختيار (Select) بالعيادات
-function populateClinicSelect(elementId, clinics) {
+// دالة لملء قائمة الاختيار (Select) بالعيادات (متاحة عالمياً)
+window.populateClinicSelect = function(elementId, clinics) {
     const selectElement = document.getElementById(elementId);
     if (!selectElement) return;
 
-    // مسح الخيارات الحالية باستثناء الخيار الافتراضي
     selectElement.innerHTML = '<option value="">اختر العيادة</option>';
 
     if (clinics.length > 0) {
@@ -69,6 +73,6 @@ function populateClinicSelect(elementId, clinics) {
             selectElement.appendChild(option);
         });
     } else {
-         console.warn(`No clinics found to populate select element: ${elementId}`);
+         console.warn(`No clinics found for select element: ${elementId}`);
     }
 }
