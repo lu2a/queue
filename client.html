@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صفحة العميل</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght=400;700&display=swap');
+        body { font-family: 'Cairo', sans-serif; }
+        .arabic-numbers { font-feature-settings: "liga" 0, "dlig" 0, "tnum" 1; font-variant-numeric: tabular-nums; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-blue-50 min-h-screen p-4 md:p-8">
+    <div class="max-w-3xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl">
+        <h1 class="text-4xl font-bold text-blue-700 mb-6 border-b pb-4">👤 خدمات العميل</h1>
+
+        <div class="mb-8 p-6 bg-indigo-50 rounded-lg shadow-inner">
+            <h2 class="text-2xl font-semibold text-indigo-700 mb-4">متابعة رقم الطابور</h2>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <select id="client-clinic-selector" class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="">اختر العيادة</option>
+                    </select>
+                <input type="number" id="client-ticket-number" placeholder="أدخل رقم تذكرتك" class="p-3 border border-gray-300 rounded-lg arabic-numbers focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            
+            <button id="start-tracking-btn" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition">بدء المتابعة</button>
+
+            <div id="tracking-info" class="mt-4 p-4 border rounded-lg bg-white hidden">
+                <p class="text-lg font-bold text-gray-700 mb-2">عيادتك: <span id="tracked-clinic-name" class="text-indigo-600">--</span></p>
+                <p class="text-sm text-gray-500">الرقم الحالي في العيادة:</p>
+                <span id="current-clinic-number" class="arabic-numbers text-5xl font-black text-red-600">--</span>
+                <p id="status-message" class="mt-2 text-green-600 font-semibold">انتظر دورك. رقمك هو: <span class="arabic-numbers" id="my-number-display">--</span></p>
+            </div>
+
+            <div class="mt-4 border-t pt-4">
+                <h3 class="text-lg font-medium mb-2">تفعيل التنبيهات (اختياري)</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="email" id="client-email" placeholder="البريد الإلكتروني" class="p-2 border rounded-lg">
+                    <input type="text" id="client-phone" placeholder="رقم التليفون (للتنبيه عبر الواتس)" class="p-2 border rounded-lg arabic-numbers">
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6 bg-red-50 rounded-lg shadow-inner">
+            <h2 class="text-2xl font-semibold text-red-700 mb-4">💬 شكوى أو اقتراح</h2>
+            <form id="feedback-form" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" id="feedback-name" placeholder="الاسم (اختياري)" class="p-3 border rounded-lg">
+                    <input type="tel" id="feedback-phone" placeholder="رقم التليفون (اختياري)" class="p-3 border rounded-lg arabic-numbers">
+                    <input type="email" id="feedback-email" placeholder="البريد الإلكتروني (اختياري)" class="p-3 border rounded-lg col-span-2">
+                </div>
+                
+                <select id="feedback-type" required class="w-full p-3 border rounded-lg focus:ring-red-500 focus:border-red-500">
+                    <option value="">نوع الطلب *</option>
+                    <option value="شكوى">شكوى</option>
+                    <option value="اقتراح">اقتراح</option>
+                </select>
+                
+                <textarea id="feedback-text" required placeholder="نص الشكوى أو الاقتراح (140 حرف كحد أدنى) *" rows="4" maxlength="500" class="w-full p-3 border rounded-lg focus:ring-red-500 focus:border-red-500"></textarea>
+                
+                <textarea id="feedback-notes" placeholder="ملاحظات أخرى (اختياري)" rows="2" class="w-full p-3 border rounded-lg"></textarea>
+                
+                <button type="submit" class="w-full bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 transition">إرسال الشكوى/الاقتراح</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ... دالة toArabicNumbers
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            // ... تهيئة Firebase
+
+            // 1. منطق متابعة الرقم
+            document.getElementById('start-tracking-btn').addEventListener('click', () => {
+                const clinicId = document.getElementById('client-clinic-selector').value;
+                const ticketNumber = document.getElementById('client-ticket-number').value;
+                
+                if (!clinicId || !ticketNumber) {
+                    alert('الرجاء اختيار العيادة وإدخال رقم التذكرة.');
+                    return;
+                }
+                
+                // **هنا يتم إعداد الاستماع لـ Realtime Database لتحديث الرقم الحالي للعيادة المختارة**
+                document.getElementById('tracked-clinic-name').textContent = document.querySelector(`#client-clinic-selector option[value="${clinicId}"]`).textContent;
+                document.getElementById('my-number-display').textContent = toArabicNumbers(ticketNumber);
+                document.getElementById('tracking-info').classList.remove('hidden');
+
+                // Listener (مثال):
+                // rtdb.ref('queue/' + clinicId + '/currentNumber').on('value', (snapshot) => {
+                //     const current = snapshot.val();
+                //     document.getElementById('current-clinic-number').textContent = toArabicNumbers(current);
+                //     if (current >= (ticketNumber - 3) && current < ticketNumber) {
+                //         // تنبيه العميل قرب دوره
+                //         // تنفيذ التنبيهات الصوتية/المرئية هنا
+                //     }
+                // });
+            });
+
+            // 2. منطق إرسال الشكوى
+            document.getElementById('feedback-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                const feedbackData = {
+                    name: document.getElementById('feedback-name').value,
+                    type: document.getElementById('feedback-type').value,
+                    text: document.getElementById('feedback-text').value,
+                    timestamp: new Date().toISOString()
+                    // ... باقي البيانات
+                };
+
+                // **إرسال البيانات إلى Firestore (Feedback Collection)**
+                // db.collection('Feedback').add(feedbackData)
+                //     .then(() => {
+                //         alert('تم إرسال الشكوى/الاقتراح بنجاح. شكراً لك.');
+                //         document.getElementById('feedback-form').reset();
+                //     })
+                //     .catch(error => console.error("Error submitting feedback: ", error));
+            });
+        });
+    </script>
+</body>
+</html>
