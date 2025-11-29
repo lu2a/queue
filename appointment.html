@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حجز موعد</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+        body { font-family: 'Cairo', sans-serif; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-purple-50 min-h-screen p-8">
+    <div class="max-w-xl mx-auto bg-white p-10 rounded-xl shadow-2xl">
+        <h1 class="text-4xl font-bold text-purple-700 mb-6 border-b pb-4">📅 طلب حجز موعد</h1>
+
+        <form id="appointment-form" class="space-y-6">
+            
+            <div class="grid grid-cols-2 gap-4">
+                <input type="text" id="app-client-name" required placeholder="اسم العميل الكامل *" class="p-3 border rounded-lg">
+                <input type="text" id="app-national-id" placeholder="الرقم القومي" class="p-3 border rounded-lg">
+                <input type="tel" id="app-phone" required placeholder="رقم التليفون *" class="p-3 border rounded-lg">
+            </div>
+
+            <select id="app-clinic-select" required class="w-full p-3 border rounded-lg focus:ring-purple-500 focus:border-purple-500">
+                <option value="">اختر العيادة المطلوبة *</option>
+                </select>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <label class="block">
+                    <span class="text-gray-700">التاريخ المطلوب *</span>
+                    <input type="date" id="app-date" required class="w-full p-3 border rounded-lg mt-1">
+                </label>
+                <label class="block">
+                    <span class="text-gray-700">التوقيت (الشيفت) *</span>
+                    <select id="app-shift" required class="w-full p-3 border rounded-lg mt-1 focus:ring-purple-500 focus:border-purple-500">
+                        <option value="">اختر الشيفت</option>
+                        <option value="morning">صباحي (٠٨:٠٠ ص - ١٤:٠٠ م)</option>
+                        <option value="evening">مسائي (١٤:٠٠ م - ٢٠:٠٠ م)</option>
+                    </select>
+                </label>
+            </div>
+            
+            <textarea id="app-reason" placeholder="سبب الزيارة باختصار" rows="3" class="w-full p-3 border rounded-lg"></textarea>
+            
+            <button type="submit" class="w-full bg-purple-600 text-white font-bold py-3 rounded-lg hover:bg-purple-700 transition">إرسال طلب الحجز</button>
+            <p id="appointment-limit-msg" class="text-sm text-center text-red-500 hidden">عفواً، الحد الأقصى للحجوزات لهذه العيادة في هذا الشيفت قد اكتمل.</p>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // ... تهيئة Firebase
+            
+            document.getElementById('appointment-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const appointmentData = {
+                    clientName: document.getElementById('app-client-name').value,
+                    clinicId: document.getElementById('app-clinic-select').value,
+                    date: document.getElementById('app-date').value,
+                    shift: document.getElementById('app-shift').value,
+                    status: 'pending', // حالة أولية
+                    timestamp: new Date().toISOString()
+                    // ... باقي البيانات
+                };
+
+                // **التحقق من الحد الأقصى للحجوزات (يتطلب استعلام من Firestore)**
+                // const clinicMax = 50; // يجب جلب هذا من Clinics Collection
+                // const currentAppointmentsCount = 45; // يجب جلب هذا من Appointments Collection بفلترة التاريخ والشيفت
+                
+                // if (currentAppointmentsCount >= clinicMax) {
+                //     document.getElementById('appointment-limit-msg').classList.remove('hidden');
+                //     alert('عفواً، الحد الأقصى للحجوزات لهذا الشيفت قد اكتمل.');
+                //     return;
+                // }
+
+                // **إرسال البيانات إلى Firestore (Appointments Collection)**
+                // db.collection('Appointments').add(appointmentData)
+                //     .then(() => {
+                //         alert('تم إرسال طلب الحجز بنجاح. سيتم التواصل معك للتأكيد.');
+                //         document.getElementById('appointment-form').reset();
+                //     })
+                //     .catch(error => console.error("Error submitting appointment: ", error));
+            });
+        });
+    </script>
+</body>
+</html>
