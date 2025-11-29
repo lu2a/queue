@@ -1,15 +1,17 @@
-// firebase-config.js
 
-// 1. تهيئة تطبيق Firebase
+
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY", // استبدل هذا
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com", // استبدل هذا
-    projectId: "YOUR_PROJECT_ID", // استبدل هذا
-    storageBucket: "YOUR_PROJECT_ID.appspot.com", // استبدل هذا
-    messagingSenderId: "YOUR_SENDER_ID", // استبدل هذا
-    appId: "YOUR_APP_ID", // استبدل هذا
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com" // استبدل هذا لـ Realtime DB
+  apiKey: "AIzaSyBi5aUu2DN15ZYgV79SbJamndIv1ilr8QQ",
+  authDomain: "queue-403b6.firebaseapp.com",
+  databaseURL: "https://queue-403b6-default-rtdb.firebaseio.com",
+  projectId: "queue-403b6",
+  storageBucket: "queue-403b6.firebasestorage.app",
+  messagingSenderId: "219447076856",
+  appId: "1:219447076856:web:e7e187e29665b01917d80d",
+  measurementId: "G-2TW7GHP5RR"
 };
+
 
 // تهيئة التطبيق
 const app = firebase.initializeApp(firebaseConfig);
