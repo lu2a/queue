@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الإدارة - نظام انتظار العملاء</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+        body { font-family: 'Cairo', sans-serif; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+
+    <div class="max-w-7xl mx-auto bg-white p-8 rounded-xl shadow-2xl">
+        <h1 class="text-4xl font-bold text-blue-700 mb-6 border-b pb-4">لوحة تحكم الإدارة</h1>
+
+        <div class="border-b border-gray-200">
+            <nav class="-mb-px flex space-x-8 rtl:space-x-reverse" aria-label="Tabs" id="admin-tabs">
+                <button data-tab="general" class="tab-button border-b-2 border-blue-500 py-4 px-1 text-sm font-medium text-blue-600 focus:outline-none">الإعدادات العامة</button>
+                <button data-tab="clinics" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none">العيادات والشاشات</button>
+                <button data-tab="call" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none">إعدادات النداء والتحكم</button>
+                <button data-tab="doctors" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none">إدارة الأطباء</button>
+            </nav>
+        </div>
+        
+        <div class="mt-8">
+            <div id="general" class="tab-content">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">الإعدادات العامة</h2>
+                <div class="space-y-4">
+                    <label class="block">
+                        <span class="text-gray-700">إسم المركز:</span>
+                        <input type="text" id="center-name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 p-2">
+                    </label>
+                    <label class="block">
+                        <span class="text-gray-700">محتوى وسرعة الشريط الإخباري:</span>
+                        <textarea id="news-ticker-content" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 p-2"></textarea>
+                        <input type="number" id="news-ticker-speed" placeholder="السرعة (1-10)" class="mt-2 block w-1/3 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 p-2">
+                    </label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <label class="block">
+                            <span class="text-gray-700">فترة عرض التنبيه (ثانية):</span>
+                            <input type="number" id="alert-duration" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 p-2">
+                        </label>
+                        <label class="block">
+                            <span class="text-gray-700">تحديد سرعة النطق (0.1 - 10):</span>
+                            <input type="number" step="0.1" id="speech-rate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 p-2">
+                        </label>
+                    </div>
+                    
+                    <h3 class="text-xl font-medium mt-6 mb-3 border-t pt-4">مسارات الميديا والصوتيات</h3>
+                    <div class="flex items-center space-x-4 rtl:space-x-reverse">
+                        <span class="text-gray-700">مكان التخزين:</span>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="media-source" value="github" checked class="form-radio text-blue-600 h-4 w-4">
+                            <span class="mr-2 rtl:ml-2 text-gray-600">مسار GitHub (افتراضي)</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="media-source" value="local" class="form-radio text-blue-600 h-4 w-4">
+                            <span class="mr-2 rtl:ml-2 text-gray-600">التخزين الداخلي (PC/Android TV)</span>
+                        </label>
+                    </div>
+                    <label class="block">
+                        <span class="text-gray-700">مسار فولدر الصوتيات ($\text{audio/}$):</span>
+                        <input type="text" id="audio-path" placeholder="/audio/" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                    </label>
+                    
+                    <button id="save-general-settings" class="mt-4 bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 transition">حفظ الإعدادات العامة</button>
+                </div>
+                
+                <h3 class="text-xl font-medium mt-8 mb-4 border-t pt-4">إدارة شاشات العرض</h3>
+                <div id="screens-list" class="bg-gray-50 p-4 rounded-lg shadow-inner">
+                    <p class="text-gray-500">جاري تحميل الشاشات...</p>
+                </div>
+                <div class="flex space-x-4 rtl:space-x-reverse mt-4">
+                    <input type="number" id="new-screen-id" placeholder="رقم الشاشة" class="rounded-md border-gray-300 p-2 w-1/4">
+                    <input type="password" id="new-screen-password" placeholder="كلمة سر الشاشة" class="rounded-md border-gray-300 p-2 w-1/4">
+                    <button id="add-screen" class="bg-green-600 text-white py-2 px-6 rounded-lg hover:bg-green-700 transition">إضافة شاشة جديدة</button>
+                </div>
+            </div>
+
+            <div id="clinics" class="tab-content hidden">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">إدارة العيادات</h2>
+                <div id="clinics-management" class="space-y-6">
+                    <div id="clinics-table">
+                         <p class="text-gray-500">جاري تحميل العيادات...</p>
+                    </div>
+                    <h3 class="text-xl font-medium mt-8 border-t pt-4">إضافة عيادة جديدة</h3>
+                    <div class="grid grid-cols-4 gap-4">
+                        <input type="text" id="new-clinic-name" placeholder="إسم العيادة" class="rounded-md border-gray-300 p-2">
+                        <input type="number" id="new-clinic-number" placeholder="رقم العيادة" class="rounded-md border-gray-300 p-2">
+                        <input type="text" id="new-clinic-screens" placeholder="أرقام الشاشات (مثال: 1,3)" class="rounded-md border-gray-300 p-2">
+                        <input type="password" id="new-clinic-password" placeholder="كلمة سر التحكم" class="rounded-md border-gray-300 p-2">
+                    </div>
+                    <button id="add-clinic" class="bg-indigo-600 text-white py-2 px-6 rounded-lg hover:bg-indigo-700 transition">حفظ العيادة</button>
+                </div>
+            </div>
+            
+            <div id="call" class="tab-content hidden">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">إعدادات النداء والتحكم الفوري</h2>
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="bg-blue-50 p-4 rounded-lg shadow">
+                        <h3 class="text-xl font-medium text-blue-700 mb-4">عمليات النداء السريع</h3>
+                        <label class="block mb-4">
+                            <span class="text-gray-700">نداء عميل معين في عيادة:</span>
+                            <div class="flex space-x-2 rtl:space-x-reverse mt-1">
+                                <select id="call-clinic-select" class="rounded-md border-gray-300 p-2 w-1/2">
+                                    <option value="">اختر العيادة</option>
+                                    </select>
+                                <input type="number" id="call-specific-number" placeholder="رقم العميل" class="rounded-md border-gray-300 p-2 w-1/4">
+                                <button id="call-specific-client" class="bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600">نداء</button>
+                            </div>
+                        </label>
+                        <button id="urgent-call" class="w-full bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition mb-3">استعجال حالة طارئة وتخطي الطابور</button>
+                        <button id="broadcast-instant-audio" class="w-full bg-yellow-600 text-white py-3 rounded-lg hover:bg-yellow-700 transition mb-3">إذاعة ملف صوتي جاهز</button>
+                        
+                        <div class="border-t pt-4">
+                            <h4 class="font-medium mb-2">تسجيل صوتي (10 ثوان)</h4>
+                            <div class="flex space-x-2 rtl:space-x-reverse">
+                                <button id="start-recording" class="bg-pink-500 text-white py-2 px-4 rounded-md hover:bg-pink-600">بدء التسجيل</button>
+                                <button id="stop-recording" disabled class="bg-gray-400 text-white py-2 px-4 rounded-md">إيقاف</button>
+                                <button id="play-recording" disabled class="bg-teal-500 text-white py-2 px-4 rounded-md hover:bg-teal-600">إذاعة</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 p-4 rounded-lg shadow">
+                        <h3 class="text-xl font-medium text-gray-700 mb-4">التحكم والتنبيهات العامة</h3>
+                        <label class="block mb-4">
+                            <span class="text-gray-700">تنبيه نصي على شاشة العرض:</span>
+                            <div class="flex space-x-2 rtl:space-x-reverse mt-1">
+                                <input type="text" id="display-alert-text" placeholder="أدخل نص التنبيه" class="rounded-md border-gray-300 p-2 w-3/4">
+                                <button id="send-display-alert" class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700">إرسال</button>
+                            </div>
+                        </label>
+                        <label class="block mb-4">
+                            <span class="text-gray-700">إرسال تنبيه للوحات التحكم:</span>
+                            <div class="flex space-x-2 rtl:space-x-reverse mt-1">
+                                <select id="control-alert-target" class="rounded-md border-gray-300 p-2 w-1/3">
+                                    <option value="all">جميع لوحات التحكم</option>
+                                    </select>
+                                <input type="text" id="control-alert-text" placeholder="نص التنبيه للوحة التحكم" class="rounded-md border-gray-300 p-2 w-1/3">
+                                <button id="send-control-alert" class="bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700">إرسال</button>
+                            </div>
+                        </label>
+                        
+                        <button id="reset-all-clinics" class="w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 transition mt-4">تصفير جميع العيادات (جعل الرقم ٠)</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="doctors" class="tab-content hidden">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">إدارة بيانات الأطباء</h2>
+                
+                <div class="bg-teal-50 p-4 rounded-lg shadow mb-6">
+                    <h3 class="text-xl font-medium text-teal-700 mb-3">رفع وأخذ نسخة من بيانات الأطباء</h3>
+                    <div class="flex space-x-4 rtl:space-x-reverse">
+                        <input type="file" id="upload-doctors-file" accept=".csv, .json" class="block w-1/2 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-teal-100 file:text-teal-700 hover:file:bg-teal-200">
+                        <button id="import-doctors" class="bg-teal-600 text-white py-2 px-6 rounded-lg hover:bg-teal-700 transition">رفع البيانات</button>
+                        <button id="export-doctors" class="bg-gray-300 text-gray-800 py-2 px-6 rounded-lg hover:bg-gray-400 transition">أخذ نسخة (تنزيل)</button>
+                    </div>
+                </div>
+
+                <div class="bg-red-50 p-4 rounded-lg shadow mb-6">
+                    <h3 class="text-xl font-medium text-red-700 mb-3">إدارة الحضور والانصراف</h3>
+                    <div class="flex space-x-4 rtl:space-x-reverse">
+                        <input type="file" id="upload-attendance-file" accept=".csv, .json" class="block w-1/2 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-100 file:text-red-700 hover:file:bg-red-200">
+                        <button id="import-attendance" class="bg-red-600 text-white py-2 px-6 rounded-lg hover:bg-red-700 transition">رفع بيانات الحضور</button>
+                    </div>
+                </div>
+                
+                <div class="bg-purple-50 p-4 rounded-lg shadow">
+                    <h3 class="text-xl font-medium text-purple-700 mb-3">مراجعة طلبات الأطباء (إجازات، مأموريات...)</h3>
+                    <button id="review-requests" class="bg-purple-600 text-white py-2 px-6 rounded-lg hover:bg-purple-700 transition">عرض ومراجعة الطلبات</button>
+                    <div id="doctors-requests-list" class="mt-4 bg-white p-3 rounded-md border">
+                        <p class="text-gray-500">لا توجد طلبات جديدة للمراجعة حالياً.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabs = document.querySelectorAll('.tab-button');
+            const contents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // إزالة التفعيل من الكل
+                    tabs.forEach(t => {
+                        t.classList.remove('border-blue-500', 'text-blue-600');
+                        t.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                    });
+                    contents.forEach(c => c.classList.add('hidden'));
+
+                    // تفعيل التبويب الحالي
+                    tab.classList.add('border-blue-500', 'text-blue-600');
+                    tab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                    
+                    // عرض المحتوى المطابق
+                    const targetId = tab.getAttribute('data-tab');
+                    document.getElementById(targetId).classList.remove('hidden');
+                });
+            });
+
+            // افتراضياً، تنشيط أول تبويب عند التحميل
+            document.querySelector('.tab-button').click();
+            
+            // تهيئة Firebase
+            // **هنا يجب إضافة تهيئة Firebase باستخدام مفاتيح مشروعك الخاصة**
+            const firebaseConfig = {
+                // ... (مفتاح API، معرف المشروع، إلخ)
+            };
+            // firebase.initializeApp(firebaseConfig);
+            // const db = firebase.firestore();
+            // const auth = firebase.auth();
+            // const rtdb = firebase.database();
+
+            // *** وظائف JavaScript لإدارة الإعدادات والتفاعل مع Firebase ***
+            // (سيتم تزويدك بها لاحقاً)
+        });
+    </script>
+</body>
+</html>
