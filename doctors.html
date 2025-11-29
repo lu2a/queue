@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صفحة الطبيب</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght=400;700&display=swap');
+        body { font-family: 'Cairo', sans-serif; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-teal-50 min-h-screen p-8 flex items-center justify-center">
+
+    <div id="auth-container" class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl text-center">
+        <h2 class="text-3xl font-bold text-teal-700 mb-6">تسجيل الدخول للأطباء</h2>
+        <input type="email" id="doctor-email" placeholder="البريد الإلكتروني" class="w-full p-3 mb-4 border rounded-lg">
+        <input type="password" id="doctor-password" placeholder="كلمة المرور" class="w-full p-3 mb-6 border rounded-lg">
+        <button id="doctor-login-btn" class="w-full bg-teal-600 text-white font-bold py-3 rounded-lg hover:bg-teal-700 transition">تسجيل الدخول</button>
+    </div>
+
+    <div id="doctor-dashboard" class="w-full max-w-5xl bg-white p-8 rounded-xl shadow-2xl hidden">
+        <header class="flex justify-between items-center mb-6 pb-4 border-b">
+            <h1 class="text-3xl font-extrabold text-teal-700">مرحباً بك، د/ <span id="doctor-name-display">--</span></h1>
+            <button id="doctor-logout-btn" class="bg-gray-400 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-500 transition">تسجيل الخروج</button>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-1 bg-teal-50 p-4 rounded-lg shadow-inner">
+                <h2 class="text-xl font-semibold text-teal-700 mb-3 border-b pb-2">بيانات الطبيب</h2>
+                <p><strong>التخصص:</strong> <span id="doc-specialty">--</span></p>
+                <p><strong>العيادة:</strong> <span id="doc-clinic">--</span></p>
+                <p><strong>حالة العمل:</strong> <span id="doc-status" class="font-bold text-green-600">نشط</span></p>
+                <p><strong>رصيد الإجازات الاعتيادي:</strong> <span id="doc-vacation-balance">--</span></p>
+            </div>
+            
+            <div class="lg:col-span-2 p-4 rounded-lg border">
+                <h2 class="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">تقرير الحضور والانصراف</h2>
+                <div id="attendance-report" class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الملاحظات</th></tr></thead>
+                        <tbody>
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-8 p-6 bg-purple-50 rounded-lg shadow">
+            <h2 class="text-2xl font-semibold text-purple-700 mb-4">تقديم طلب جديد</h2>
+            <form id="request-form" class="space-y-4">
+                <select id="request-type" required class="w-full p-3 border rounded-lg focus:ring-purple-500">
+                    <option value="">نوع الطلب *</option>
+                    <option value="اعتيادية">إجازة اعتيادية</option>
+                    <option value="عارضة">إجازة عارضة</option>
+                    <option value="مرضى">إجازة مرضى</option>
+                    <option value="اذن صباحي">إذن صباحي</option>
+                    <option value="بدل راحة">بدل راحة</option>
+                    </select>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <label class="block">
+                        <span class="text-gray-700">من تاريخ:</span>
+                        <input type="date" id="request-from" required class="w-full p-3 border rounded-lg mt-1">
+                    </label>
+                    <label class="block">
+                        <span class="text-gray-700">إلى تاريخ:</span>
+                        <input type="date" id="request-to" required class="w-full p-3 border rounded-lg mt-1">
+                    </label>
+                </div>
+                
+                <input type="text" id="replacement-doctor" placeholder="القائم بالعمل (الطبيب البديل)" class="w-full p-3 border rounded-lg">
+                <textarea id="request-notes" placeholder="ملاحظات أخرى (اختياري)" rows="2" class="w-full p-3 border rounded-lg"></textarea>
+                
+                <button type="submit" class="w-full bg-purple-600 text-white font-bold py-3 rounded-lg hover:bg-purple-700 transition">إرسال الطلب للإدارة</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // ... تهيئة Firebase
+
+            // 1. منطق المصادقة (Auth)
+            document.getElementById('doctor-login-btn').addEventListener('click', () => {
+                const email = document.getElementById('doctor-email').value;
+                const password = document.getElementById('doctor-password').value;
+                
+                // **تنفيذ firebase.auth().signInWithEmailAndPassword(email, password)**
+                // في حالة النجاح:
+                // auth.onAuthStateChanged(user => {
+                //     if (user) {
+                //         // **جلب بيانات الطبيب من Firestore (Doctors Collection)**
+                //         // **عرض لوحة التحكم (doctor-dashboard) وإخفاء شاشة الدخول**
+                //         document.getElementById('auth-container').classList.add('hidden');
+                //         document.getElementById('doctor-dashboard').classList.remove('hidden');
+                //     }
+                // });
+            });
+
+            // 2. منطق إرسال الطلب
+            document.getElementById('request-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                const requestData = {
+                    doctorID: 'current_user_id',
+                    type: document.getElementById('request-type').value,
+                    fromDate: document.getElementById('request-from').value,
+                    toDate: document.getElementById('request-to').value,
+                    status: 'pending',
+                    timestamp: new Date().toISOString()
+                };
+
+                // **إرسال البيانات إلى Firestore (Requests Collection)**
+                // db.collection('Requests').add(requestData)
+                //     .then(() => {
+                //         alert('تم إرسال طلبك بنجاح. سيتم مراجعته من قبل الإدارة.');
+                //         document.getElementById('request-form').reset();
+                //     });
+            });
+        });
+    </script>
+</body>
+</html>
