@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>شاشة عرض الأرقام - المركز الطبي</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&display=swap');
+        body { font-family: 'Cairo', sans-serif; }
+        /* لتطبيق الأرقام العربية الهندية (١، ٢، ٣...) */
+        .arabic-numbers {
+            font-feature-settings: "liga" 0, "dlig" 0, "tnum" 1;
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col p-2">
+
+    <div id="notification-bar" class="fixed top-0 left-0 right-0 z-50 p-4 text-center bg-yellow-400 text-gray-900 font-bold text-3xl shadow-2xl hidden transition-all duration-300 ease-in-out">
+        <span>🔔 على العميل رقم <span class="arabic-numbers">٤٤</span> التوجه إلى عيادة طب الأسرة (<span id="alert-time">٠٨:٤٥</span> ص)</span>
+    </div>
+
+    <header class="flex justify-between items-center bg-gray-800 p-3 rounded-lg shadow-xl mb-2">
+        <h1 id="center-name-display" class="text-3xl font-extrabold text-blue-400">المركز الطبي لخدمة العملاء والمرضى</h1>
+        <div class="flex items-center space-x-6 rtl:space-x-reverse">
+            <div class="text-xl font-bold arabic-numbers">
+                <span id="current-time">١١:١٨ ص</span>
+                <span class="mx-2">|</span>
+                <span id="current-date">٢٩ / ١١ / ٢٠٢٥</span>
+            </div>
+            <select id="screen-selector" class="bg-gray-700 text-white p-2 rounded-md border border-gray-600 text-sm focus:ring-blue-500">
+                <option value="1">الشاشة رقم 1</option>
+                <option value="2">الشاشة رقم 2</option>
+                </select>
+            <button id="fullscreen-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full w-10 h-10 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m7-5v4m0 0h4M16 4l-5 5m5 11v-4m0 0h-4m4 4l-5-5m-7 5v-4m0 0h4m-4 4l5-5" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex flex-grow gap-2">
+        <div class="w-1/4 flex flex-col space-y-2">
+            <div id="clinic-cards-container" class="space-y-2 flex-grow overflow-y-hidden">
+                <div class="clinic-card bg-gray-800 p-4 rounded-lg shadow-lg">
+                    <p class="text-xl text-gray-400">جاري تحميل العيادات...</p>
+                </div>
+            </div>
+
+            <div class="h-48 grid grid-cols-2 gap-2">
+                <div class="bg-blue-800 p-2 rounded-lg flex flex-col items-center justify-center shadow-lg">
+                    <h3 class="text-lg font-bold mb-1">متابعة العميل</h3>
+                    <div id="qr-code" class="bg-white p-1 rounded">
+                        
+                    </div>
+                    <p class="text-xs mt-1 text-blue-200">امسح الكود لتتبع رقمك</p>
+                </div>
+                <div class="bg-gray-800 p-2 rounded-lg flex items-center justify-center overflow-hidden relative shadow-lg">
+                    <img id="doctor-image" src="/media/doctors/default.jpg" alt="صورة الطبيب" class="object-cover w-full h-full transition-opacity duration-1000">
+                    <div id="doctor-name-overlay" class="absolute bottom-0 w-full bg-black bg-opacity-50 text-center text-sm p-1">
+                        <span id="current-doctor-name">د. أحمد علي (طب الأسرة)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-3/4 bg-gray-800 rounded-lg shadow-2xl overflow-hidden">
+            <video id="media-player" controls autoplay muted loop class="w-full h-full object-cover">
+                <source src="/media/videos/awareness.mp4" type="video/mp4">
+            </video>
+        </div>
+    </main>
+
+    <div id="news-ticker" class="mt-2 bg-blue-600 text-white p-2 rounded-lg overflow-hidden whitespace-nowrap shadow-xl">
+        <p id="ticker-content" class="text-xl font-medium inline-block animate-marquee">
+            📢 محتوى الشريط الإخباري المتحرك يتم تعديله من صفحة الإدارة: أهلاً بكم في المركز الطبي، نتمنى لكم زيارة مريحة وسريعة.
+        </p>
+    </div>
+
+    <script>
+        // دالة لتحويل الأرقام إلى العربية الهندية
+        function toArabicNumbers(number) {
+            const arabicMap = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+            return String(number).replace(/[0-9]/g, (d) => arabicMap[d]);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // ... تهيئة Firebase
+
+            // وظيفة عرض النداء
+            window.displayCall = function(clinicName, number, time) {
+                const bar = document.getElementById('notification-bar');
+                const alertTime = document.getElementById('alert-time');
+                const numberSpan = bar.querySelector('.arabic-numbers');
+                
+                numberSpan.textContent = toArabicNumbers(number);
+                alertTime.textContent = time;
+                bar.innerHTML = `🔔 على العميل رقم <span class="arabic-numbers">${toArabicNumbers(number)}</span> التوجه إلى عيادة ${clinicName} (${time} ص)`;
+                bar.classList.remove('hidden');
+
+                // تلوين ووميض كارت العيادة
+                const clinicCard = document.querySelector(`.clinic-card[data-clinic-name="${clinicName}"]`);
+                if (clinicCard) {
+                    clinicCard.classList.add('bg-red-500', 'animate-pulse');
+                }
+
+                // إخفاء بعد فترة التنبيه (سيتم جلبها من الإعدادات)
+                setTimeout(() => {
+                    bar.classList.add('hidden');
+                    if (clinicCard) {
+                        clinicCard.classList.remove('bg-red-500', 'animate-pulse');
+                        clinicCard.classList.add('bg-gray-800'); // العودة للون الأصلي
+                    }
+                }, 5000); // 5 ثواني افتراضيا
+            };
+
+            // ... وظائف تحديث الوقت والتاريخ، وملء شاشات العرض، وتشغيل الفيديو
+            // ... وظائف الاستماع إلى Realtime Database لتحديث الأرقام
+            // ... وظيفة التحقق من كلمة سر الشاشة قبل الدخول
+
+            // تشغيل النداء التجريبي
+            // displayCall("طب الأسرة", ٧٨, "١١:٣٠");
+        });
+    </script>
+</body>
+</html>
