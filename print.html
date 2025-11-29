@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صفحة طباعة تذاكر العملاء</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&display=swap');
+        body { font-family: 'Cairo', sans-serif; }
+        .arabic-numbers { font-feature-settings: "liga" 0, "dlig" 0, "tnum" 1; font-variant-numeric: tabular-nums; }
+        
+        /* تنسيق خاص للطباعة */
+        @media print {
+            body {
+                background: none;
+                margin: 0;
+                padding: 0;
+            }
+            #print-controls {
+                display: none;
+            }
+            .ticket-grid {
+                page-break-after: always; /* لبدء صفحة جديدة بعد كل مجموعة */
+            }
+            /* تحديد حجم التذكرة: 5 سم في 5 سم على صفحة A4 */
+            .ticket-item {
+                width: 5cm;
+                height: 5cm;
+                border: 1px solid #000; /* حدود واضحة للقص */
+                padding: 5px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                align-items: center;
+                text-align: center;
+                float: right; /* للترتيب من اليمين لليسار */
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+
+    <div id="print-controls" class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-lg mb-8">
+        <h1 class="text-3xl font-bold text-yellow-700 mb-4 border-b pb-2">🖨️ إعدادات طباعة تذاكر الطابور</h1>
+        
+        <div class="grid grid-cols-4 gap-4 items-end">
+            <select id="clinic-select-print" class="p-3 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500">
+                <option value="">اختر العيادة</option>
+                </select>
+            <input type="number" id="start-number" placeholder="من رقم" class="p-3 border border-gray-300 rounded-lg arabic-numbers">
+            <input type="number" id="end-number" placeholder="إلى رقم" class="p-3 border border-gray-300 rounded-lg arabic-numbers">
+            <button id="generate-tickets-btn" class="bg-yellow-600 text-white font-bold py-3 rounded-lg hover:bg-yellow-700 transition">إنشاء وطباعة التذاكر</button>
+        </div>
+    </div>
+
+    <div id="tickets-output" class="max-w-4xl mx-auto bg-white p-4 hidden">
+        <div id="ticket-grid" class="flex flex-wrap items-start justify-start gap-0.5">
+            </div>
+    </div>
+    
+    <script>
+        function toArabicNumbers(number) {
+            const arabicMap = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+            return String(number).replace(/[0-9]/g, (d) => arabicMap[d]);
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('generate-tickets-btn').addEventListener('click', () => {
+                const startNum = parseInt(document.getElementById('start-number').value);
+                const endNum = parseInt(document.getElementById('end-number').value);
+                const clinicName = document.querySelector('#clinic-select-print option:checked').textContent;
+                const centerName = "المركز الطبي لخدمة العملاء"; // يجب جلب هذا من إعدادات Firebase
+
+                if (isNaN(startNum) || isNaN(endNum) || startNum > endNum) {
+                    alert("الرجاء إدخال نطاق أرقام صحيح.");
+                    return;
+                }
+
+                const outputContainer = document.getElementById('ticket-grid');
+                outputContainer.innerHTML = '';
+                document.getElementById('tickets-output').classList.remove('hidden');
+
+                const currentDate = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+                
+                // توليد التذاكر
+                for (let i = startNum; i <= endNum; i++) {
+                    const ticketHtml = `
+                        <div class="ticket-item text-gray-900">
+                            <p class="text-xs font-medium text-gray-700">${centerName}</p>
+                            <div class="text-center my-1">
+                                <p class="text-xl font-bold">${clinicName}</p>
+                                <p class="text-xs">الرقم:</p>
+                                <span class="arabic-numbers text-6xl font-black text-red-700 leading-none">${toArabicNumbers(i)}</span>
+                            </div>
+                            <div class="text-xs w-full border-t pt-1">
+                                <p>التاريخ: ${currentDate}</p>
+                                <p>الانتظار التقريبي: <span class="arabic-numbers">٠٠</span> دقيقة</p>
+                            </div>
+                        </div>
+                    `;
+                    outputContainer.innerHTML += ticketHtml;
+                }
+
+                // فتح نافذة الطباعة
+                window.print();
+            });
+        });
+    </script>
+</body>
+</html>
