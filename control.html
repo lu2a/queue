@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صفحة التحكم بالعيادة</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+        body { font-family: 'Cairo', sans-serif; }
+        .arabic-numbers { font-feature-settings: "liga" 0, "dlig" 0, "tnum" 1; font-variant-numeric: tabular-nums; }
+        .control-btn { transition: background-color 0.2s, transform 0.1s; }
+        .control-btn:active { transform: scale(0.98); }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 flex items-center justify-center">
+
+    <div id="login-form" class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl text-center">
+        <h2 class="text-3xl font-bold text-indigo-700 mb-6">تسجيل الدخول للتحكم</h2>
+        <div class="space-y-4">
+            <select id="clinic-selector" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                <option value="">اختر العيادة</option>
+                </select>
+            <input type="password" id="clinic-password" placeholder="أدخل كلمة السر للعيادة" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+            <button id="login-btn" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition">دخول</button>
+        </div>
+    </div>
+
+    <div id="control-panel" class="w-full max-w-4xl bg-white p-8 rounded-xl shadow-2xl hidden">
+        
+        <header class="flex justify-between items-center mb-6 pb-4 border-b">
+            <h1 id="clinic-title" class="text-3xl font-extrabold text-indigo-700">عيادة طب الأسرة</h1>
+            <div class="text-center">
+                <p class="text-gray-500 text-lg">الرقم الحالي:</p>
+                <span id="current-number-display" class="arabic-numbers text-6xl font-black text-red-600 leading-none">٧٧</span>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <button id="next-client-btn" class="control-btn bg-green-600 text-white py-4 rounded-xl text-xl font-bold hover:bg-green-700">العميل التالي ➡️</button>
+            <button id="repeat-call-btn" class="control-btn bg-yellow-500 text-white py-4 rounded-xl text-xl font-bold hover:bg-yellow-600">تكرار النداء 🔊</button>
+            <button id="stop-clinic-btn" class="control-btn bg-red-600 text-white py-4 rounded-xl text-xl font-bold hover:bg-red-700">إيقاف العيادة 🛑</button>
+            <button id="reset-clinic-btn" class="control-btn bg-gray-600 text-white py-4 rounded-xl text-xl font-bold hover:bg-gray-700">تصفير العيادة 🔄</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-6">
+            
+            <div class="p-3 bg-indigo-50 rounded-lg">
+                <p class="text-indigo-700 font-semibold mb-2">نداء مخصص</p>
+                <div class="flex space-x-2 rtl:space-x-reverse">
+                    <button id="prev-client-btn" class="control-btn bg-purple-500 text-white py-2 px-3 rounded-md text-sm hover:bg-purple-600">العميل السابق ⬅️</button>
+                    <input type="number" id="specific-number-input" placeholder="رقم عميل" class="w-1/3 p-2 border rounded-md text-sm arabic-numbers">
+                    <button id="call-specific-btn" class="control-btn bg-indigo-500 text-white py-2 px-3 rounded-md text-sm hover:bg-indigo-600">نداء</button>
+                </div>
+            </div>
+
+            <div class="p-3 bg-red-50 rounded-lg">
+                <p class="text-red-700 font-semibold mb-2">إجراءات سريعة</p>
+                <div class="flex space-x-2 rtl:space-x-reverse">
+                    <button id="emergency-call-btn" class="control-btn w-1/2 bg-red-600 text-white py-2 rounded-md text-sm hover:bg-red-700">تنبيه طوارئ 🚨</button>
+                    <select id="transfer-clinic-select" class="w-1/2 p-2 border rounded-md text-sm">
+                        <option value="">تحويل إلى...</option>
+                        </select>
+                </div>
+            </div>
+            
+            <div class="p-3 bg-teal-50 rounded-lg">
+                <p class="text-teal-700 font-semibold mb-2">تنبيهات</p>
+                <div class="flex space-x-2 rtl:space-x-reverse">
+                    <button id="alert-doctor-btn" class="control-btn w-1/2 bg-teal-600 text-white py-2 rounded-md text-sm hover:bg-teal-700">تنبيه طبيب 🧑‍⚕️</button>
+                    <button id="alert-client-online-btn" class="control-btn w-1/2 bg-yellow-600 text-white py-2 rounded-md text-sm hover:bg-yellow-700">تنبيه عميل (أونلاين) 📱</button>
+                </div>
+            </div>
+        </div>
+
+        <button id="logout-btn" class="mt-8 bg-gray-400 text-gray-800 py-2 px-6 rounded-lg hover:bg-gray-500 transition float-left">الخروج من العيادة</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // ... تهيئة Firebase
+
+            // وظيفة التحقق من كلمة السر والدخول
+            document.getElementById('login-btn').addEventListener('click', () => {
+                const clinicId = document.getElementById('clinic-selector').value;
+                const password = document.getElementById('clinic-password').value;
+                
+                // **هنا يتم التحقق من كلمة السر في Firebase Firestore (Clinics Collection)**
+                if (clinicId && password === 'correct_password') { // مثال افتراضي
+                    document.getElementById('login-form').classList.add('hidden');
+                    document.getElementById('control-panel').classList.remove('hidden');
+                    document.getElementById('clinic-title').textContent = document.querySelector(`#clinic-selector option[value="${clinicId}"]`).textContent;
+                    // **بدء الاستماع لـ Realtime Database لتحديث الرقم الحالي**
+                } else {
+                    alert('خطأ في اختيار العيادة أو كلمة السر.');
+                }
+            });
+
+            // وظيفة العميل التالي
+            document.getElementById('next-client-btn').addEventListener('click', () => {
+                // **تحديث currentNumber في Realtime Database**
+                // **تنفيذ النداء الصوتي عبر Web Speech API**
+            });
+            
+            // ... باقي وظائف الأزرار (تكرار، تصفير، إيقاف، إلخ)
+        });
+    </script>
+</body>
+</html>
