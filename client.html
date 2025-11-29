@@ -3,205 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>صفحة العميل</title>
+    <title>صفحة طباعة تذاكر العملاء</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="firebase-config.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght=400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&display=swap');
         body { font-family: 'Cairo', sans-serif; }
         .arabic-numbers { font-feature-settings: "liga" 0, "dlig" 0, "tnum" 1; font-variant-numeric: tabular-nums; }
+        
+        /* تنسيق خاص للطباعة */
+        @media print {
+            body {
+                background: none;
+                margin: 0;
+                padding: 0;
+            }
+            #print-controls {
+                display: none;
+            }
+            .ticket-grid {
+                page-break-after: always; /* لبدء صفحة جديدة بعد كل مجموعة */
+            }
+            /* تحديد حجم التذكرة: 5 سم في 5 سم على صفحة A4 */
+            .ticket-item {
+                width: 5cm;
+                height: 5cm;
+                border: 1px solid #000; /* حدود واضحة للقص */
+                padding: 5px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                align-items: center;
+                text-align: center;
+                float: right; /* للترتيب من اليمين لليسار */
+            }
+        }
     </style>
+    <!-- 1. تحميل مكتبات Firebase الأساسية أولاً -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <!-- 2. ثم تحميل ملف الإعدادات الذي يحتوي على الدوال المساعدة -->
+    <script src="firebase-config.js"></script>
 </head>
-<body class="bg-blue-50 min-h-screen p-4 md:p-8">
-    <div class="max-w-3xl mx-auto bg-white p-6 md:p-10 rounded-xl shadow-2xl">
-        <h1 class="text-4xl font-bold text-blue-700 mb-6 border-b pb-4">👤 خدمات العميل</h1>
+<body class="bg-gray-50 min-h-screen p-8">
 
-        <div class="mb-8 p-6 bg-indigo-50 rounded-lg shadow-inner">
-            <h2 class="text-2xl font-semibold text-indigo-700 mb-4">متابعة رقم الطابور</h2>
-            
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <select id="client-clinic-selector" class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-                    <option value="">اختر العيادة</option>
-                    </select>
-                <input type="number" id="client-ticket-number" placeholder="أدخل رقم تذكرتك" class="p-3 border border-gray-300 rounded-lg arabic-numbers focus:ring-indigo-500 focus:border-indigo-500">
-            </div>
-            
-            <button id="start-tracking-btn" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition">بدء المتابعة</button>
-
-            <div id="tracking-info" class="mt-4 p-4 border rounded-lg bg-white hidden">
-                <p class="text-lg font-bold text-gray-700 mb-2">عيادتك: <span id="tracked-clinic-name" class="text-indigo-600">--</span></p>
-                <p class="text-sm text-gray-500">الرقم الحالي في العيادة:</p>
-                <span id="current-clinic-number" class="arabic-numbers text-5xl font-black text-red-600">--</span>
-                <p id="status-message" class="mt-2 text-green-600 font-semibold">انتظر دورك. رقمك هو: <span class="arabic-numbers" id="my-number-display">--</span></p>
-            </div>
-
-            <div class="mt-4 border-t pt-4">
-                <h3 class="text-lg font-medium mb-2">تفعيل التنبيهات (اختياري)</h3>
-                <div class="grid grid-cols-2 gap-4">
-                    <input type="email" id="client-email" placeholder="البريد الإلكتروني" class="p-2 border rounded-lg">
-                    <input type="text" id="client-phone" placeholder="رقم التليفون (للتنبيه عبر الواتس)" class="p-2 border rounded-lg arabic-numbers">
-                </div>
-            </div>
-        </div>
-
-        <div class="p-6 bg-red-50 rounded-lg shadow-inner">
-            <h2 class="text-2xl font-semibold text-red-700 mb-4">💬 شكوى أو اقتراح</h2>
-            <form id="feedback-form" class="space-y-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <input type="text" id="feedback-name" placeholder="الاسم (اختياري)" class="p-3 border rounded-lg">
-                    <input type="tel" id="feedback-phone" placeholder="رقم التليفون (اختياري)" class="p-3 border rounded-lg arabic-numbers">
-                    <input type="email" id="feedback-email" placeholder="البريد الإلكتروني (اختياري)" class="p-3 border rounded-lg col-span-2">
-                </div>
-                
-                <select id="feedback-type" required class="w-full p-3 border rounded-lg focus:ring-red-500 focus:border-red-500">
-                    <option value="">نوع الطلب *</option>
-                    <option value="شكوى">شكوى</option>
-                    <option value="اقتراح">اقتراح</option>
+    <div id="print-controls" class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-lg mb-8">
+        <h1 class="text-3xl font-bold text-yellow-700 mb-4 border-b pb-2">🖨️ إعدادات طباعة تذاكر الطابور</h1>
+        
+        <div class="grid grid-cols-4 gap-4 items-end">
+            <select id="clinic-select-print" class="p-3 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500">
+                <option value="">اختر العيادة</option>
                 </select>
-                
-                <textarea id="feedback-text" required placeholder="نص الشكوى أو الاقتراح (140 حرف كحد أدنى) *" rows="4" maxlength="500" class="w-full p-3 border rounded-lg focus:ring-red-500 focus:border-red-500"></textarea>
-                
-                <textarea id="feedback-notes" placeholder="ملاحظات أخرى (اختياري)" rows="2" class="w-full p-3 border rounded-lg"></textarea>
-                
-                <button type="submit" class="w-full bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 transition">إرسال الشكوى/الاقتراح</button>
-            </form>
+            <input type="number" id="start-number" placeholder="من رقم" class="p-3 border border-gray-300 rounded-lg arabic-numbers">
+            <input type="number" id="end-number" placeholder="إلى رقم" class="p-3 border border-gray-300 rounded-lg arabic-numbers">
+            <button id="generate-tickets-btn" class="bg-yellow-600 text-white font-bold py-3 rounded-lg hover:bg-yellow-700 transition">إنشاء وطباعة التذاكر</button>
         </div>
     </div>
 
+    <div id="tickets-output" class="max-w-4xl mx-auto bg-white p-4 hidden">
+        <div id="ticket-grid" class="flex flex-wrap items-start justify-start gap-0.5">
+            </div>
+    </div>
+    
     <script>
-        // ... دالة toArabicNumbers
         
-        document.addEventListener('DOMContentLoaded', () => {
-            // ... تهيئة Firebase
+        document.addEventListener('DOMContentLoaded', async () => {
+            // **الخطوة الأولى: تهيئة Firebase**
+            initFirebase(); 
 
-            // 1. منطق متابعة الرقم
-            document.getElementById('start-tracking-btn').addEventListener('click', () => {
-                const clinicId = document.getElementById('client-clinic-selector').value;
-                const ticketNumber = document.getElementById('client-ticket-number').value;
-                
-                if (!clinicId || !ticketNumber) {
-                    alert('الرجاء اختيار العيادة وإدخال رقم التذكرة.');
+            // تحميل العيادات لملء قائمة الطباعة
+            const allClinics = await fetchClinics();
+            populateClinicSelect('clinic-select-print', allClinics);
+            
+            document.getElementById('generate-tickets-btn').addEventListener('click', async () => {
+                const startNum = parseInt(document.getElementById('start-number').value);
+                const endNum = parseInt(document.getElementById('end-number').value);
+                const clinicNameElement = document.querySelector('#clinic-select-print option:checked');
+                const clinicName = clinicNameElement ? clinicNameElement.textContent : 'العيادة';
+
+                if (isNaN(startNum) || isNaN(endNum) || startNum > endNum || !clinicNameElement || !clinicNameElement.value) {
+                    alert("الرجاء إدخال نطاق أرقام صحيح واختيار العيادة.");
                     return;
                 }
+
+                // جلب اسم المركز من الإعدادات
+                let centerName = "المركز الطبي لخدمة العملاء"; 
+                try {
+                    const settingsDoc = await db.collection('Settings').doc('general').get();
+                    if (settingsDoc.exists) {
+                        centerName = settingsDoc.data().centerName || centerName;
+                    }
+                } catch (e) {
+                    console.error("Could not fetch center name:", e);
+                }
+
+                const outputContainer = document.getElementById('ticket-grid');
+                outputContainer.innerHTML = '';
+                document.getElementById('tickets-output').classList.remove('hidden');
+
+                const currentDate = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
                 
-                // **هنا يتم إعداد الاستماع لـ Realtime Database لتحديث الرقم الحالي للعيادة المختارة**
-                document.getElementById('tracked-clinic-name').textContent = document.querySelector(`#client-clinic-selector option[value="${clinicId}"]`).textContent;
-                document.getElementById('my-number-display').textContent = toArabicNumbers(ticketNumber);
-                document.getElementById('tracking-info').classList.remove('hidden');
+                // توليد التذاكر
+                for (let i = startNum; i <= endNum; i++) {
+                    const ticketHtml = `
+                        <div class="ticket-item text-gray-900">
+                            <p class="text-xs font-medium text-gray-700">${centerName}</p>
+                            <div class="text-center my-1">
+                                <p class="text-xl font-bold">${clinicName}</p>
+                                <p class="text-xs">الرقم:</p>
+                                <span class="arabic-numbers text-6xl font-black text-red-700 leading-none">${toArabicNumbers(i)}</span>
+                            </div>
+                            <div class="text-xs w-full border-t pt-1">
+                                <p>التاريخ: ${toArabicNumbers(currentDate)}</p>
+                                <p>الانتظار التقريبي: <span class="arabic-numbers">٠٠</span> دقيقة</p>
+                            </div>
+                        </div>
+                    `;
+                    outputContainer.innerHTML += ticketHtml;
+                }
 
-                // Listener (مثال):
-                // rtdb.ref('queue/' + clinicId + '/currentNumber').on('value', (snapshot) => {
-                //     const current = snapshot.val();
-                //     document.getElementById('current-clinic-number').textContent = toArabicNumbers(current);
-                //     if (current >= (ticketNumber - 3) && current < ticketNumber) {
-                //         // تنبيه العميل قرب دوره
-                //         // تنفيذ التنبيهات الصوتية/المرئية هنا
-                //     }
-                // });
-            });
-
-            // 2. منطق إرسال الشكوى
-            document.getElementById('feedback-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                
-                const feedbackData = {
-                    name: document.getElementById('feedback-name').value,
-                    type: document.getElementById('feedback-type').value,
-                    text: document.getElementById('feedback-text').value,
-                    timestamp: new Date().toISOString()
-                    // ... باقي البيانات
-                };
-
-                // **إرسال البيانات إلى Firestore (Feedback Collection)**
-                // db.collection('Feedback').add(feedbackData)
-                //     .then(() => {
-                //         alert('تم إرسال الشكوى/الاقتراح بنجاح. شكراً لك.');
-                //         document.getElementById('feedback-form').reset();
-                //     })
-                //     .catch(error => console.error("Error submitting feedback: ", error));
+                // فتح نافذة الطباعة
+                setTimeout(() => window.print(), 100);
             });
         });
-
-
-        document.addEventListener('DOMContentLoaded', async () => {
-    // 1. تحميل العيادات لقائمة الاختيار
-    const allClinics = await fetchClinics();
-    populateClinicSelect('client-clinic-selector', allClinics);
-
-    // ----------------------------------------------------
-    // 2. منطق متابعة الرقم (Realtime DB)
-    // ----------------------------------------------------
-    document.getElementById('start-tracking-btn').addEventListener('click', () => {
-        const clinicId = document.getElementById('client-clinic-selector').value;
-        const ticketNumber = document.getElementById('client-ticket-number').value;
-        const clinicName = document.querySelector(`#client-clinic-selector option[value="${clinicId}"]`).textContent;
-
-        if (!clinicId || !ticketNumber || isNaN(parseInt(ticketNumber))) {
-            alert('الرجاء اختيار العيادة وإدخال رقم التذكرة الصحيح.');
-            return;
-        }
-
-        document.getElementById('tracked-clinic-name').textContent = clinicName;
-        document.getElementById('my-number-display').textContent = toArabicNumbers(ticketNumber);
-        document.getElementById('tracking-info').classList.remove('hidden');
-
-        const myNumber = parseInt(ticketNumber);
-        
-        // الاستماع للتغييرات في Realtime DB
-        rtdb.ref('queue/' + clinicId + '/currentNumber').on('value', (snapshot) => {
-            const current = snapshot.val() || 0;
-            document.getElementById('current-clinic-number').textContent = toArabicNumbers(current);
-            const statusMessage = document.getElementById('status-message');
-
-            if (current >= myNumber) {
-                statusMessage.textContent = `📢 رقمك هو ${toArabicNumbers(myNumber)}. يرجى التوجه إلى العيادة الآن!`;
-                statusMessage.classList.replace('text-green-600', 'text-red-600');
-                // **تفعيل تنبيه المتصفح (Web Notification) هنا**
-            } else if (current >= (myNumber - 5)) {
-                statusMessage.textContent = `قرب دورك! تبقى ${toArabicNumbers(myNumber - current)} عميل.`;
-                statusMessage.classList.replace('text-red-600', 'text-yellow-600');
-            } else {
-                 statusMessage.textContent = `انتظر دورك. رقمك هو: ${toArabicNumbers(myNumber)}`;
-                 statusMessage.classList.replace('text-red-600', 'text-green-600');
-            }
-        });
-    });
-
-    // ----------------------------------------------------
-    // 3. منطق إرسال الشكوى (Firestore)
-    // ----------------------------------------------------
-    document.getElementById('feedback-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const feedbackText = document.getElementById('feedback-text').value;
-        if (feedbackText.length < 10) { // تعديل بسيط للتحقق من النص
-            alert('يجب أن يكون نص الشكوى/الاقتراح أكثر من 10 أحرف.');
-            return;
-        }
-
-        const feedbackData = {
-            name: document.getElementById('feedback-name').value || 'عميل مجهول',
-            phone: document.getElementById('feedback-phone').value,
-            email: document.getElementById('feedback-email').value,
-            type: document.getElementById('feedback-type').value,
-            text: feedbackText,
-            notes: document.getElementById('feedback-notes').value,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        };
-
-        try {
-            await db.collection('Feedback').add(feedbackData);
-            alert('تم إرسال الشكوى/الاقتراح بنجاح. شكراً لك.');
-            document.getElementById('feedback-form').reset();
-        } catch (error) {
-            console.error("Error submitting feedback: ", error);
-            alert('حدث خطأ أثناء الإرسال.');
-        }
-    });
-});
     </script>
 </body>
 </html>
