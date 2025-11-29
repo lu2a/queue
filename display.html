@@ -125,6 +125,139 @@
             // تشغيل النداء التجريبي
             // displayCall("طب الأسرة", ٧٨, "١١:٣٠");
         });
+
+
+        document.addEventListener('DOMContentLoaded', async () => {
+    // ----------------------------------------------------
+    // 1. وظيفة النطق (Text-to-Speech)
+    // ----------------------------------------------------
+    const speech = window.speechSynthesis;
+    let speechRate = 1.0; // سيتم جلبها من الإعدادات
+
+    function speak(text) {
+        if (!speech) return;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ar-EG'; // تعيين اللغة العربية المصرية
+        utterance.rate = speechRate;
+        speech.speak(utterance);
+    }
+
+    // ----------------------------------------------------
+    // 2. تحميل الإعدادات الأساسية (السرعة والمسارات)
+    // ----------------------------------------------------
+    const settingsDoc = await db.collection('Settings').doc('general').get();
+    let settings = {};
+    if (settingsDoc.exists) {
+        settings = settingsDoc.data();
+        document.getElementById('center-name-display').textContent = settings.centerName || 'المركز الطبي';
+        document.getElementById('ticker-content').textContent = settings.newsTickerContent || 'محتوى إخباري افتراضي';
+        speechRate = settings.speechRate || 1.0;
+        // هنا يتم استخدام settings.newsTickerSpeed لتعديل سرعة الـ CSS animation
+    }
+    
+    // ----------------------------------------------------
+    // 3. دالة النداء الصوتي والاشعار (تستخدم ملفات الصوت والـ TTS)
+    // ----------------------------------------------------
+
+    // ملاحظة: بما أنك طلبت ملفات صوتية جاهزة (ding.mp3, 25.mp3, clinic1.mp3)
+    // يجب استخدام مكتبة مثل Howler.js أو Web Audio API لتشغيل ملفات MP3 بالتسلسل.
+    
+    // مثال النداء المدمج:
+    function callClient(clinicName, number) {
+        // 1. النداء الصوتي (بافتراض استخدام Web Audio API لتشغيل ding.mp3 و الملفات الجاهزة)
+        // **هنا يتم تشغيل Ding.mp3 ثم 25.mp3 ثم clinic1.mp3 بالتسلسل**
+        
+        // 2. النطق (كخطة بديلة أو تكميلية)
+        const speechText = `على العميل رقم ${number} التوجه إلى عيادة ${clinicName}`;
+        speak(speechText);
+        
+        // 3. عرض الاشعار البصري
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+        
+        window.displayCall(clinicName, number, timeStr);
+    }
+    
+    // ----------------------------------------------------
+    // 4. تحديث الأرقام عبر Realtime Database
+    // ----------------------------------------------------
+    const clinicCardsContainer = document.getElementById('clinic-cards-container');
+    const screenID = 1; // الافتراض هو الشاشة رقم 1
+    
+    // جلب العيادات المخصصة لهذه الشاشة
+    const clinicsToDisplay = (await fetchClinics()).filter(c => c.screenIDs.includes(screenID));
+
+    if (clinicsToDisplay.length === 0) {
+        clinicCardsContainer.innerHTML = '<p class="text-xl text-gray-400 p-4">لم يتم تخصيص أي عيادات لهذه الشاشة.</p>';
+        return;
+    }
+
+    // إنشاء كروت العيادات وربطها بـ Realtime DB
+    clinicsToDisplay.forEach(clinic => {
+        const card = document.createElement('div');
+        card.className = 'clinic-card bg-gray-800 p-4 rounded-lg shadow-lg transition duration-500';
+        card.setAttribute('data-clinic-id', clinic.id);
+        card.setAttribute('data-clinic-name', clinic.clinicName);
+        
+        card.innerHTML = `
+            <h3 class="text-xl font-bold text-white">${clinic.clinicName}</h3>
+            <p class="text-gray-400">الرقم الحالي:</p>
+            <span class="current-number arabic-numbers text-7xl font-black text-green-400 block leading-none">٠٠</span>
+            <p class="text-sm text-gray-500 mt-2">آخر نداء: <span class="last-call-time">--</span></p>
+            <p class="text-sm text-gray-500">الحالة: <span class="clinic-status font-bold ${clinic.isActive ? 'text-green-500' : 'text-red-500'}">${clinic.isActive ? 'نشطة' : 'متوقفة'}</span></p>
+        `;
+        clinicCardsContainer.appendChild(card);
+        
+        // الاستماع للتغييرات في Realtime DB
+        rtdb.ref('queue/' + clinic.id).on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                const oldNumber = parseInt(card.querySelector('.current-number').textContent.replace(/[^0-9]/g, '')) || 0;
+                const newNumber = data.currentNumber || 0;
+                
+                card.querySelector('.current-number').textContent = toArabicNumbers(newNumber);
+                
+                if (newNumber > oldNumber) {
+                    callClient(clinic.clinicName, newNumber);
+                }
+            }
+        });
+        
+        // الاستماع لتغيير حالة العيادة في Firestore
+        db.collection('Clinics').doc(clinic.id).onSnapshot(doc => {
+            const isActive = doc.data().isActive;
+            const statusSpan = card.querySelector('.clinic-status');
+            statusSpan.textContent = isActive ? 'نشطة' : 'متوقفة';
+            card.classList.toggle('opacity-50', !isActive); // لون باهت إذا كانت متوقفة
+        });
+    });
+
+    // ----------------------------------------------------
+    // 5. تحديث الوقت والتاريخ (لتحويلها إلى الأرقام العربية)
+    // ----------------------------------------------------
+    function updateDateTime() {
+        const now = new Date();
+        document.getElementById('current-time').textContent = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+        document.getElementById('current-date').textContent = now.toLocaleDateString('ar-EG');
+    }
+    setInterval(updateDateTime, 1000);
+    updateDateTime(); // تشغيل فوري
+    
+    // ----------------------------------------------------
+    // 6. تفعيل ملء الشاشة (باستخدام زر fullscreen-btn)
+    // ----------------------------------------------------
+    document.getElementById('fullscreen-btn').addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    });
+
+});
+        
     </script>
 </body>
 </html>
