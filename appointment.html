@@ -86,6 +86,63 @@
                 //     .catch(error => console.error("Error submitting appointment: ", error));
             });
         });
+
+        document.addEventListener('DOMContentLoaded', async () => {
+    // 1. تحميل العيادات
+    const allClinics = await fetchClinics();
+    populateClinicSelect('app-clinic-select', allClinics);
+    
+    // 2. منطق الحجز (التحقق من الحد الأقصى والإرسال)
+    document.getElementById('appointment-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const clinicId = document.getElementById('app-clinic-select').value;
+        const date = document.getElementById('app-date').value;
+        const shift = document.getElementById('app-shift').value;
+        const clientName = document.getElementById('app-client-name').value;
+        
+        // جلب بيانات العيادة لمعرفة الحد الأقصى للحجوزات
+        const clinicDoc = await db.collection('Clinics').doc(clinicId).get();
+        if (!clinicDoc.exists) return alert('العيادة المختارة غير موجودة.');
+        const maxAppointments = clinicDoc.data().maxAppointments || 50;
+        
+        // الاستعلام عن عدد الحجوزات الحالية في نفس اليوم والشيفت
+        const appointmentsSnapshot = await db.collection('Appointments')
+            .where('clinicId', '==', clinicId)
+            .where('date', '==', date)
+            .where('shift', '==', shift)
+            .get();
+
+        const currentAppointmentsCount = appointmentsSnapshot.size;
+        
+        if (currentAppointmentsCount >= maxAppointments) {
+            document.getElementById('appointment-limit-msg').classList.remove('hidden');
+            alert('عفواً، الحد الأقصى للحجوزات لهذا الشيفت قد اكتمل.');
+            return;
+        }
+
+        const appointmentData = {
+            clientName: clientName,
+            nationalID: document.getElementById('app-national-id').value,
+            phone: document.getElementById('app-phone').value,
+            clinicId: clinicId,
+            date: date,
+            shift: shift,
+            reason: document.getElementById('app-reason').value,
+            status: 'قيد المراجعة',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        try {
+            await db.collection('Appointments').add(appointmentData);
+            alert('تم إرسال طلب الحجز بنجاح. سيتم التواصل معك للتأكيد.');
+            document.getElementById('appointment-form').reset();
+        } catch (error) {
+            console.error("Error submitting appointment:", error);
+            alert('حدث خطأ أثناء الحجز.');
+        }
+    });
+});
     </script>
 </body>
 </html>
